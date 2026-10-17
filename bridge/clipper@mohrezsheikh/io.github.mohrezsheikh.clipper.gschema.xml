@@ -3,7 +3,7 @@
   <schema id="io.github.mohrezsheikh.clipper" path="/io/github/mohrezsheikh/clipper/">
     <key name="clipper-toggle" type="as">
       <summary>Keybinding to toggle the Clipper popup</summary>
-      <default><![CDATA[['<Super>v']]]></default>
+      <default><![CDATA[['<Control><Alt>v']]]></default>
     </key>
     <key name="theme" type="s">
       <summary>UI theme: system, light or dark</summary>
@@ -19,10 +19,6 @@
     </key>
     <key name="incognito" type="b">
       <summary>Incognito: do not record new clipboard items</summary>
-      <default>false</default>
-    </key>
-    <key name="win-v-taken" type="b">
-      <summary>Whether Win+V was already taken from the notification tray</summary>
       <default>false</default>
     </key>
     <key name="hide-on-focus-loss" type="b">

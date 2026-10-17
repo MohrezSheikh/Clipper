@@ -1,6 +1,6 @@
 # Clipper
 
-A Windows-style clipboard manager for GNOME. Press **Win+V** and a clean
+A Windows-style clipboard manager for GNOME. Press **Ctrl+Alt+V** and a clean
 clipboard history appears right where you are typing — text, code, image
 thumbnails, screenshots with their file locations, files, links and colors —
 with search, pinning, and one-key pasting into the window you were working in.
@@ -12,9 +12,9 @@ on GNOME Wayland.
 
 ## Features
 
-- **Win+V opens the overlay at your cursor** (falls back above the cursor if
-  there is not enough room). Installing it moves Win+V away from the
-  notification panel; you can still change the key with `gsettings`.
+- **A hotkey opens the overlay at your cursor** (falls back above the cursor
+  if there is not enough room). Default: `Ctrl+Alt+V`, conflict-free on every
+  Ubuntu setup; change it any time with `gsettings`.
 - **All content types as cards**: plain text, multi-line code (monospace
   preview), images and screenshots (thumbnail, file name, size), file lists
   (name, path, count), links and colors. Copying the same thing again bumps it
@@ -44,7 +44,7 @@ sudo apt install ./clipper_0.1.0_all.deb
 ```
 
 Then **log out and back in once** (a GNOME extension always needs a fresh
-session), and press **Win+V**.
+session), and press **Ctrl+Alt+V**.
 
 ### From source
 
@@ -58,9 +58,9 @@ Uninstall: `./uninstall.sh` (add `--purge` to remove your history data, too).
 
 ## Keyboard reference
 
-| Keys                 | Action                                    |
-|----------------------|-------------------------------------------|
-| Win+V (default)      | Toggle the popup at the cursor            |
+| Keys                      | Action                                    |
+|---------------------------|-------------------------------------------|
+| Ctrl+Alt+V (default)      | Toggle the popup at the cursor            |
 | Type (or `/`)        | Search                                    |
 | Up / Down            | Move through the list                     |
 | Enter or click card  | Put the item on the clipboard and paste   |
@@ -72,14 +72,15 @@ Uninstall: `./uninstall.sh` (add `--purge` to remove your history data, too).
 
 ## The shortcut
 
-Default: `Super+V`. Change it with:
+Default: `Ctrl+Alt+V`. Change it with, for example:
 
 ```bash
 gsettings set io.github.mohrezsheikh.clipper clipper-toggle "['<Super>v']"
 ```
 
-Clipper takes Win+V from the notification panel on first run. To give it
-back, run `gsettings reset org.gnome.shell.keybindings toggle-message-tray`
+If you pick `Super+V` you may also want to free it from GNOME's notification
+panel (`toggle-message-tray`, which stock Ubuntu binds to it); rebinding that
+is done in GNOME Settings → Keyboard. `Ctrl+Alt+V` needs no such step.
 
 ## What is inside
 
@@ -97,7 +98,8 @@ dist/deb.sh                    builds the .deb (one command)
 
 ## Troubleshooting
 
-- **Win+V shows nothing after install** — a fresh session is required. Run
+- **Ctrl+Alt+V shows nothing after install** — a fresh session is
+  required (the extension must load anew). Run
   `./install.sh` again if unsure, then log out/in once.
 - **Write about what you copied, but nothing appears** — history is written
   on capture; check the shell log: `journalctl --user | grep clipper`.

@@ -1,9 +1,11 @@
-/* Clipper — Windows-style clipboard history for GNOME (Super+V).
+/* Clipper — Windows-style clipboard history for GNOME.
+ *
+ * Default hotkey: Ctrl+Alt+V (configurable via gsettings).
  *
  * Everything lives inside GNOME Shell:
  *   - captures clipboard changes from Mutter's selection model;
  *   - stores history as JSON + image files under ~/.local/share/Clipper;
- *   - opens a card dialog anchored to the cursor with Win+V;
+ *   - opens a card dialog anchored to the cursor with the hotkey;
  *   - pastes the chosen item into the previously focused window
  *     (clipboard claim + Ctrl+V injection).
  *
@@ -53,51 +55,8 @@ export default class ClipperExtension extends Extension {
             Shell.ActionMode.ALL,
             () => this._dialog.toggle());
 
-        this._takeOverWinV();
         this._settingsBind();
         log('clipper: extension enabled');
-    }
-
-    /* First run: take `<Super>v` away from toggle-message-tray so Win+V
-     * shows Clipper instead of the notification panel. Runs once; users
-     * can still change keys via gsettings at any time. */
-    _takeOverWinV() {
-        try {
-            if (this._settings.get_boolean('win-v-taken'))
-                return;
-            const traySettings = Gio.Settings.new('org.gnome.shell.keybindings');
-            const current = traySettings.get_strv('toggle-message-tray');
-            if (current.includes('<Super>v')) {
-                traySettings.set_strv('toggle-message-tray',
-                    current.filter(acc => acc !== '<Super>v'));
-            }
-            this._settings.set_boolean('win-v-taken', true);
-            log('clipper: Win+V now bound to Clipper');
-        } catch (e) {
-            log(`clipper: Win+V takeover failed: ${e}`);
-        }
-    }
-
-    disable() {
-        if (this._dialog) {
-            this._dialog.close();
-            this._dialog = null;
-        }
-        if (this._capture) {
-            this._capture.stop();
-            this._capture = null;
-        }
-        if (this._settings) {
-            Main.wm.removeKeybinding('clipper-toggle');
-            for (const signal of (this._settingsSignals ?? [])) {
-                this._settings.disconnect(signal);
-            }
-            this._settingsSignals = [];
-            this._unloadStylesheet();
-            this._settings = null;
-        }
-        this._history = null;
-        log('clipper: extension disabled');
     }
 
     _settingsBind() {

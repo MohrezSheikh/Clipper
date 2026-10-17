@@ -1,7 +1,7 @@
 {
     "uuid": "clipper@mohrezsheikh",
     "name": "Clipper Clipboard Bridge",
-    "description": "Tiny companion for the Clipper clipboard manager: feeds clipboard events (text/images/files) to the Clipper app over DBus, registers the Win+V toggling keybinding, and injects Ctrl+V on paste. Use the Clipper app for settings.",
+    "description": "Tiny companion for the Clipper clipboard manager: feeds clipboard events (text/images/files) to the Clipper app over DBus, registers the toggle keybinding (default Ctrl+Alt+V), and injects Ctrl+V on paste. Use the Clipper app for settings.",
     "shell-version": ["45", "46", "47", "48", "49"],
     "url": "https://github.com/mohrezsheikh/clipper"
 }

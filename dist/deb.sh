@@ -51,8 +51,8 @@ cat > "$PKG/DEBIAN/postinst" <<'EOF'
 set -e
 glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
 echo "clipper: installed."
-echo "clipper: log out & back in once, then press Win+V. The extension"
-echo "clipper: automatically moves Win+V from the notification panel."
+echo "clipper: log out & back in once, then press Ctrl+Alt+V. The"
+echo "clipper: hotkey is changeable via gsettings (see README).
 EOF
 
 cat > "$PKG/DEBIAN/prerm" <<'EOF'
@@ -67,9 +67,7 @@ cat > "$PKG/DEBIAN/postrm" <<'EOF'
 #!/bin/sh
 set -e
 glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
-echo "clipper: removed. Win+V returns to the notification panel after"
-echo "clipper: the next logout, or run:"
-echo "clipper:   gsettings reset org.gnome.shell.keybindings toggle-message-tray"
+echo "clipper: removed."
 EOF
 
 chmod 755 "$PKG/DEBIAN/postinst" "$PKG/DEBIAN/prerm" "$PKG/DEBIAN/postrm"

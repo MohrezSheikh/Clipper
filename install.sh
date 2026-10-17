@@ -39,13 +39,14 @@ cp "$SRC/bridge/$EXT_UUID/io.github.mohrezsheikh.clipper.gschema.xml" "$SCHEMA_D
 glib-compile-schemas "$SCHEMA_DIR"
 
 # ----------------------------------------------------------- keybinding
-info "claiming Super+V (Win+V) for Clipper"
-tray="$(gsettings get org.gnome.shell.keybindings toggle-message-tray 2>/dev/null || echo '[]')"
-if [[ "$tray" == *"<Super>v"* ]]; then
-  new_tray="$(printf '%s' "$tray" | sed "s/, '<Super>v'//; s/'<Super>v', //; s/'<Super>v'//")"
-  gsettings set org.gnome.shell.keybindings toggle-message-tray "$new_tray"
-fi
+# Default hotkey is Ctrl+Alt+V (conflict-free).  If a previous Clipper
+# release moved Win+V out of the notification panel, restore the stock one:
+info "setting Clipper toggle key (default Ctrl+Alt+V)"
 gsettings reset io.github.mohrezsheikh.clipper clipper-toggle
+if command -v gnome-extensions >/dev/null && \
+   gnome-extensions info clipper@mohrezsheikh 2>/dev/null | grep -q "State: ACTIVE"; then
+  gnome-extensions disable clipper@mohrezsheikh || true
+fi
 
 # ---------------------------------------------------- enable next session
 enabled="$(gsettings get org.gnome.shell enabled-extensions 2>/dev/null || echo '[]')"

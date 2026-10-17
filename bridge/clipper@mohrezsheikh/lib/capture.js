@@ -57,6 +57,7 @@ export class CaptureManager {
             type !== Meta.SelectionType.SELECTION_CLIPBOARD ||
             source === null)
             return;
+        log('clipper: clipboard owner changed');
         // settle briefly so the new owner finished advertising its content
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 25, () => {
             this._capture(source).catch(e => log(`clipper: capture error: ${e}`));
@@ -88,10 +89,12 @@ export class CaptureManager {
                     item = this._storeFileList(bytes.toString(), mime);
                 } else {
                     const text = bytes.toString();
-                    if (text.length > 0)
+                    if (text.length > 0) {
                         item = this._history.add(KIND_TEXT, text, {
                             size: text.length * 2,
                         }).item;
+                        log(`clipper: captured text (${text.length} chars)`);
+                    }
                 }
                 if (item) {
                     this._onCaptured?.(item);
@@ -99,6 +102,7 @@ export class CaptureManager {
                 }
             }
         }
+        log('clipper: nothing captured (no matching mime)');
     }
 
     _readMime(source, mime, limit) {

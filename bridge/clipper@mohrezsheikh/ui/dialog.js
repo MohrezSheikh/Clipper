@@ -30,6 +30,7 @@ export class ClipperDialog {
         this._built = false;
         this._modal = false;
         this._stageHandler = 0;
+        this._watchdog = 0;
         this._rows = [];
         this._selectedIndex = 0;
         this._filterText = '';
@@ -88,10 +89,24 @@ export class ClipperDialog {
         // With a stage grab every event funnels through the grabbed actor's
         // chain, so a captured-event handler on the stage still sees clicks
         // landing outside the card - use the coordinates to dismiss.
+        this._card.connect('key-press-event',
+            this._onCapturedEvent.bind(this));
         this._stageHandler = global.stage.connect('captured-event',
             this._onGlobalEvent.bind(this));
         this._open = true;
         this._search.grab_key_focus();
+
+        // watchdog: if the card is gone from the stage while we still think
+        // we are open, tear the state down so nothing stays grabbed
+        this._watchdog = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
+            this._watchdog = 0;
+            if (this._open && !this._card.get_parent()) {
+                log('clipper: dialog vanished unexpectedly; releasing grab');
+                this._destroyChrome();
+                this._open = false;
+            }
+            return GLib.SOURCE_REMOVE;
+        });
     }
 
     close() {
@@ -102,6 +117,10 @@ export class ClipperDialog {
     }
 
     _destroyChrome() {
+        if (this._watchdog) {
+            GLib.source_remove(this._watchdog);
+            this._watchdog = 0;
+        }
         if (this._stageHandler) {
             try {
                 global.stage.disconnect(this._stageHandler);
@@ -129,6 +148,13 @@ export class ClipperDialog {
     }
 
     _onGlobalEvent(_stage, event) {
+        if (event.type() === Clutter.EventType.KEY_PRESS) {
+            if (event.get_key_symbol() === Clutter.KEY_Escape) {
+                this.close();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        }
         if (event.type() !== Clutter.EventType.BUTTON_PRESS &&
             event.type() !== Clutter.EventType.TOUCH_BEGIN)
             return Clutter.EVENT_PROPAGATE;
@@ -161,7 +187,12 @@ export class ClipperDialog {
         this._card.connect('captured-event',
             this._onCapturedEvent.bind(this));
 
-        // search bar
+        // search bar with an explicit close button (always-dismissable)
+        const topBar = new St.BoxLayout({
+            style_class: 'clipper-topbar',
+            vertical: false,
+            x_expand: true,
+        });
         this._search = new St.Entry({
             style_class: 'clipper-search',
             hint_text: 'Search clipboard…',
@@ -176,7 +207,20 @@ export class ClipperDialog {
         // St.Entry has no `activate` signal; the inner ClutterText does.
         this._search.get_clutter_text().connect('activate',
             () => this._pasteSelected());
-        this._card.add_child(this._search);
+        topBar.add_child(this._search);
+
+        this._closeButton = new St.Button({
+            style_class: 'clipper-button clipper-close',
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        this._closeButton.set_child(new St.Icon({
+            icon_name: 'window-close-symbolic',
+            icon_size: 14,
+        }));
+        this._closeButton.connect('clicked', () => this.close());
+        topBar.add_child(this._closeButton);
+
+        this._card.add_child(topBar);
 
         // history list
         this._listBox = new St.BoxLayout({
