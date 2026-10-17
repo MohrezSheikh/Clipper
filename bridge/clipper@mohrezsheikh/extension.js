@@ -1,281 +1,189 @@
-/* Clipper Clipboard Bridge
+/* Clipper — Windows-style clipboard history for GNOME (Super+V).
  *
- * A deliberately small GNOME Shell extension with no UI of its own:
- *  1. watches Mutter's clipboard owner-changed events and forwards
- *     text / image / file-list captures to the Clipper app over DBus;
- *  2. registers the toggle keybinding (schema key `clipper-toggle`);
- *  3. exposes `io.github.mohrezsheikh.clipper.bridge.Paste()` which injects Ctrl+V
- *     into the previously focused window so Enter in the Clipper popup
- *     behaves like Windows' clipboard.
+ * Everything lives inside GNOME Shell:
+ *   - captures clipboard changes from Mutter's selection model;
+ *   - stores history as JSON + image files under ~/.local/share/Clipper;
+ *   - opens a card dialog anchored to the cursor with Win+V;
+ *   - pastes the chosen item into the previously focused window
+ *     (clipboard claim + Ctrl+V injection).
  *
- * Everything user-facing (history, settings) lives in the app.
+ * No daemon, no additional processes.
  */
-import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
 
-import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const APP_ID = 'io.github.mohrezsheikh.clipper';
-const APP_PATH = '/io/github/mohrezsheikh/clipper';
-const APP_IFACE = 'io.github.mohrezsheikh.clipper';
-const BRIDGE_NAME = 'io.github.mohrezsheikh.clipper.bridge';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
-const IMAGE_MIMES = ['image/png', 'image/jpeg'];
-const FILES_MIMES = ['x-special/gnome-copied-files', 'text/uri-list'];
-const TEXT_MIMES = ['text/plain;charset=utf-8', 'text/plain'];
+import {CaptureManager} from './lib/capture.js';
+import {ClipperHistory, KIND_IMAGE, KIND_FILES} from './lib/storage.js';
+import {ClipperDialog} from './ui/dialog.js';
 
-const TEXT_LIMIT = 2 * 1024 * 1024;      // don't forward gigantic text blobs
-const IMAGE_LIMIT = 48 * 1024 * 1024;
-const FILELIST_LIMIT = 512 * 1024;
-
-const BRIDGE_XML = `
-<node>
-  <interface name="io.github.mohrezsheikh.clipper.bridge">
-    <method name="Paste"/>
-    <method name="Ping"><arg type="s" direction="out"/></method>
-  </interface>
-</node>`;
-
-const KEY_CTRL = Clutter.KEY_Control_L !== undefined ? Clutter.KEY_Control_L : 65507;
-const KEY_V = Clutter.KEY_v !== undefined ? Clutter.KEY_v : 118;
-
-export default class ClipperBridge extends Extension {
+export default class ClipperExtension extends Extension {
     enable() {
-        log('clipper: bridge enabled');
-        this._selection = global.display.get_selection();
-        this._selHandler = this._selection.connect(
-            'owner-changed', this._onOwnerChanged.bind(this));
+        this._settings = this.getSettings('io.github.mohrezsheikh.clipper');
+        this._loadStylesheet();
 
-        this._settings = Gio.Settings.new(APP_ID);
+        this._history = new ClipperHistory();
+        this._history.setLimit(this._settings.get_int('history-limit'));
+
+        this._capture = new CaptureManager(this._history, this._settings);
+        this._capture.start({onCaptured: this._refreshDialog.bind(this)});
+
+        this._dialog = new ClipperDialog({
+            history: this._history,
+            incognito: this._settings.get_boolean('incognito'),
+            onPaste: this._paste.bind(this),
+            onCopy: this._copy.bind(this),
+            onClear: this._clear.bind(this),
+            onIncognitoChanged: enabled => {
+                this._settings.set_boolean('incognito', enabled);
+                this._refreshDialog();
+            },
+            onOpenFolder: this._openFolder.bind(this),
+        });
+
         Main.wm.addKeybinding(
             'clipper-toggle', this._settings,
             Meta.KeyBindingFlags.IGNORE_AUTOREPEAT,
             Shell.ActionMode.ALL,
-            () => this._appCall('Toggle', null));
+            () => this._dialog.toggle());
 
-        this._bridgeOwner = Gio.bus_own_name(
-            Gio.BusType.SESSION, BRIDGE_NAME, Gio.BusNameOwnerFlags.NONE,
-            bus => this._onBusAcquired(bus), null, null);
+        this._takeOverWinV();
+        this._settingsBind();
+        log('clipper: extension enabled');
+    }
+
+    /* First run: take `<Super>v` away from toggle-message-tray so Win+V
+     * shows Clipper instead of the notification panel. Runs once; users
+     * can still change keys via gsettings at any time. */
+    _takeOverWinV() {
+        try {
+            if (this._settings.get_boolean('win-v-taken'))
+                return;
+            const traySettings = Gio.Settings.new('org.gnome.shell.keybindings');
+            const current = traySettings.get_strv('toggle-message-tray');
+            if (current.includes('<Super>v')) {
+                traySettings.set_strv('toggle-message-tray',
+                    current.filter(acc => acc !== '<Super>v'));
+            }
+            this._settings.set_boolean('win-v-taken', true);
+            log('clipper: Win+V now bound to Clipper');
+        } catch (e) {
+            log(`clipper: Win+V takeover failed: ${e}`);
+        }
     }
 
     disable() {
-        if (this._bridgeOwner !== undefined) {
-            Gio.bus_unown_name(this._bridgeOwner);
-            this._bridgeOwner = undefined;
+        if (this._dialog) {
+            this._dialog.close();
+            this._dialog = null;
         }
-        if (this._selHandler !== undefined && this._selection) {
-            this._selection.disconnect(this._selHandler);
-            this._selHandler = undefined;
+        if (this._capture) {
+            this._capture.stop();
+            this._capture = null;
         }
-        this._selection = null;
-        this._settings = null;
-        Main.wm.removeKeybinding('clipper-toggle');
-        log('clipper: bridge disabled');
+        if (this._settings) {
+            Main.wm.removeKeybinding('clipper-toggle');
+            for (const signal of (this._settingsSignals ?? [])) {
+                this._settings.disconnect(signal);
+            }
+            this._settingsSignals = [];
+            this._unloadStylesheet();
+            this._settings = null;
+        }
+        this._history = null;
+        log('clipper: extension disabled');
     }
 
-    _onBusAcquired(bus) {
-        const info = Gio.DBusNodeInfo.new_for_xml(BRIDGE_XML);
-        try {
-            bus.register_object(APP_PATH, info.interfaces[0], this._bridgeDispatch.bind(this));
-        } catch (e) {
-            log(`clipper: bridge object registration failed: ${e}`);
-        }
-    }
-
-    _bridgeDispatch(_conn, _sender, _path, _iface, method, _params, invocation) {
-        if (method === 'Paste') {
-            this._paste();
-            invocation.return_value(null);
-            return;
-        } else if (method === 'Ping') {
-            invocation.return_value(new GLib.Variant('(s)', ['clipper-bridge']));
-            return;
-        }
-        invocation.return_value(null);
-    }
-
-    /* ------------------------------------------------- clipboard watcher */
-    _onOwnerChanged(_selection, type, source) {
-        if (type !== Meta.SelectionType.SELECTION_CLIPBOARD || source === null)
-            return;
-        // settle briefly so the new owner finished advertising its content
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 25, () => {
-            this._capture(source).catch(e => log(`clipper: capture error: ${e}`));
-            return GLib.SOURCE_REMOVE;
-        });
-    }
-
-    async _capture(source) {
-        const kinds = [
-            {name: 'image', mimes: IMAGE_MIMES, limit: IMAGE_LIMIT},
-            {name: 'files', mimes: FILES_MIMES, limit: FILELIST_LIMIT},
-            {name: 'text',  mimes: TEXT_MIMES,  limit: TEXT_LIMIT},
+    _settingsBind() {
+        this._settingsSignals = [
+            this._settings.connect(
+                'changed::history-limit',
+                () => this._history.setLimit(
+                    this._settings.get_int('history-limit'))),
+            this._settings.connect(
+                'changed::incognito',
+                () => this._dialog.setIncognito(
+                    this._settings.get_boolean('incognito'))),
         ];
-        for (const kind of kinds) {
-            for (const mime of kind.mimes) {
-                const bytes = await this._readMime(source, mime, kind.limit);
-                if (bytes === null || bytes.get_size() === 0)
-                    continue;
-                if (kind.name === 'image') {
-                    await this._forwardImage(mime, bytes);
-                    return;
-                } else if (kind.name === 'files') {
-                    const blob = this._parseFileList(bytes.toString(), mime);
-                    if (blob) {
-                        this._appCall('CaptureFiles', GLib.Variant.new_string(blob));
-                        return;
-                    }
-                    continue;
-                } else {
-                    const text = bytes.toString();
-                    if (text.length === 0)
-                        continue;
-                    this._appCall('CaptureText', GLib.Variant.new_string(text));
-                    return;
-                }
-            }
-        }
     }
 
-    _readMime(source, mime, limit) {
-        return new Promise(resolve => {
-            source.read_async([mime], GLib.PRIORITY_DEFAULT, null,
-                (src, res) => {
-                    let stream;
-                    try {
-                        stream = src.read_finish(res);
-                    } catch {
-                        resolve(null);  // mime type simply not offered
-                        return;
-                    }
-                    this._readStreamChunks(stream, limit).then(resolve)
-                        .catch(() => resolve(null));
-                });
-        });
-    }
-
-    async _readStreamChunks(stream, limit) {
-        const chunks = [];
-        let total = 0;
-        while (total < limit) {
-            const want = Math.min(1 << 20, limit - total);
-            const chunk = await new Promise((resolve, reject) => {
-                stream.read_bytes_async(want, GLib.PRIORITY_DEFAULT, null,
-                    (s, res) => {
-                        try {
-                            resolve(s.read_bytes_finish(res));
-                        } catch (e) {
-                            reject(e);
-                        }
-                    });
-            });
-            if (!chunk || chunk.get_size() === 0)
-                break;
-            chunks.push(chunk);
-            total += chunk.get_size();
-        }
-        if (chunks.length === 0)
-            return null;
-        return chunks.length === 1 ? chunks[0] : GLib.Bytes.concat(chunks);
-    }
-
-    async _forwardImage(mime, bytes) {
+    /* -------------------------------------------------------------- styling */
+    _loadStylesheet() {
         try {
-            const checksum = new GLib.Checksum(GLib.ChecksumType.MD5);
-            checksum.update(bytes.toArray());
-            const digest = checksum.get_string() ?? '';
-            if (!digest)
-                return;
-
-            const ext = mime === 'image/png' ? 'png' : 'jpg';
-            const dir = `${GLib.get_user_data_dir()}/Clipper/images`;
-            GLib.mkdir_with_parents(dir, 0o755);
-            const path = `${dir}/${digest}.${ext}`;
-
-            const file = Gio.File.new_for_path(path);
-            const out = file.replace(null, false,
-                Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-            await new Promise((resolve, reject) => {
-                out.write_bytes_async(bytes, GLib.PRIORITY_DEFAULT, null,
-                    (o, res) => {
-                        try {
-                            o.write_bytes_finish(res);
-                            resolve();
-                        } catch (e) {
-                            reject(e);
-                        }
-                    });
-            });
-            await new Promise(resolve => {
-                out.close_async(GLib.PRIORITY_DEFAULT, null, (o, res) => {
-                    try {
-                        o.close_finish(res);
-                    } catch { /* already closed */ }
-                    resolve();
-                });
-            });
-
-            this._appCall('CaptureImage', GLib.Variant.new_string(path));
+            const context = St.ThemeContext.get_for_stage(global.stage);
+            this._cssFile = Gio.File.new_for_uri(
+                `${this.dir.get_uri()}/clipboard.css`);
+            context.get_theme().load_stylesheet(this._cssFile);
         } catch (e) {
-            log(`clipper: image capture failed: ${e}`);
+            log(`clipper: stylesheet load failed: ${e}`);
         }
     }
 
-    _parseFileList(blob, mime) {
-        let uris;
-        if (mime === 'x-special/gnome-copied-files') {
-            const lines = blob.split('\n');
-            if (lines.length < 2)
-                return null;  // operation-only, no files behind it
-            uris = lines.slice(1);
-        } else {
-            uris = blob.split(/\r?\n/);
+    _unloadStylesheet() {
+        if (!this._cssFile)
+            return;
+        try {
+            const context = St.ThemeContext.get_for_stage(global.stage);
+            context.get_theme().unload_stylesheet(this._cssFile);
+        } catch {
+            /* theme may have been reset in a shell restart */
         }
-        uris = uris.filter(u => u.trim().length > 0);
-        if (uris.length === 0)
-            return null;
-        return uris.join('\n');
+        this._cssFile = null;
     }
 
-    /* ------------------------------------------------------ DBus helpers */
-    _appCall(method, params) {
-        Gio.DBus.session.call(APP_ID, APP_PATH, APP_IFACE, method, params,
-            null, Gio.DBusCallFlags.NONE, -1, null,
-            (bus, res) => {
-                try {
-                    bus.call_finish(res);
-                } catch (e) {
-                    // app not running (yet); the capture is lost this time
-                    log(`clipper: app call ${method} failed: ${e}`);
-                }
-            });
+    _refreshDialog() {
+        if (this._dialog?.isOpen())
+            this._dialog._refreshRows();
     }
 
-    /* --------------------------------------------- Windows-style paste */
-    _paste() {
-        // wait for the Clipper window to actually lose focus, then Ctrl+V
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 130, () => {
-            try {
-                const seat = Clutter.get_default_backend().get_default_seat();
-                const device = seat.create_virtual_device(
-                    Clutter.InputDeviceType.KEYBOARD_DEVICE);
-                device.notify_key(Clutter.KeyEventType.KEY_PRESS, KEY_CTRL, 0, 0, 0);
-                device.notify_key(Clutter.KeyEventType.KEY_PRESS, KEY_V, 0,
-                    Clutter.ModifierType.CONTROL_MASK, 0);
-                GLib.timeout_add(GLib.PRIORITY_DEFAULT, 40, () => {
-                    device.notify_key(Clutter.KeyEventType.KEY_RELEASE, KEY_V, 0,
-                        Clutter.ModifierType.CONTROL_MASK, 0);
-                    device.notify_key(Clutter.KeyEventType.KEY_RELEASE, KEY_CTRL, 0, 0, 0);
-                    return GLib.SOURCE_REMOVE;
-                });
-            } catch (e) {
-                log(`clipper: paste injection failed: ${e}`);
-            }
+    /* ---------------------------------------------------------- dialog glue */
+    async _paste(item) {
+        this._dialog.close();
+        // let the shell hand focus back to the previous window first
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 90, () => {
+            this._capture.claimAndPaste(item).catch(
+                e => log(`clipper: paste failed: ${e}`));
             return GLib.SOURCE_REMOVE;
         });
+    }
+
+    async _copy(item) {
+        try {
+            await this._capture.claim(item);
+        } catch (e) {
+            log(`clipper: copy failed: ${e}`);
+        }
+        this._dialog.close();
+    }
+
+    _clear() {
+        this._history.clear(true);
+        this._refreshDialog();
+    }
+
+    _openFolder(item) {
+        try {
+            const path = item.kind === KIND_IMAGE
+                ? item.content : uriFilePath(item.content.split('\n')[0]);
+            const dir = GLib.path_get_dirname(path);
+            Gio.Subprocess.new(['nautilus', dir],
+                Gio.SubprocessFlags.NONE);
+        } catch (e) {
+            log(`clipper: open folder failed: ${e}`);
+        }
+    }
+}
+
+function uriFilePath(uri) {
+    try {
+        return GLib.uri_parse(uri, GLib.UriFlags.NONE).get_path() ?? uri;
+    } catch {
+        return uri;
     }
 }

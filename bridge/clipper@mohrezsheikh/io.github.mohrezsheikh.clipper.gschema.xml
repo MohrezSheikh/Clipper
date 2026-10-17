@@ -21,6 +21,10 @@
       <summary>Incognito: do not record new clipboard items</summary>
       <default>false</default>
     </key>
+    <key name="win-v-taken" type="b">
+      <summary>Whether Win+V was already taken from the notification tray</summary>
+      <default>false</default>
+    </key>
     <key name="hide-on-focus-loss" type="b">
       <summary>Hide the popup when it loses focus</summary>
       <default>true</default>
