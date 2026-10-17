@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+dist/debroot/
+dist/*.deb
+dist/SHA256SUMS

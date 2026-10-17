@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="io.github.mohrezsheikh.clipper" path="/io/github/mohrezsheikh/clipper/">
+    <key name="clipper-toggle" type="as">
+      <summary>Keybinding to toggle the Clipper popup</summary>
+      <default><![CDATA[['<Super>v']]]></default>
+    </key>
+    <key name="theme" type="s">
+      <summary>UI theme: system, light or dark</summary>
+      <default>'system'</default>
+    </key>
+    <key name="history-limit" type="i">
+      <summary>Maximum number of unpinned items kept in history</summary>
+      <default>200</default>
+    </key>
+    <key name="auto-paste" type="b">
+      <summary>Paste selected item into the previously focused window (injects Ctrl+V)</summary>
+      <default>true</default>
+    </key>
+    <key name="incognito" type="b">
+      <summary>Incognito: do not record new clipboard items</summary>
+      <default>false</default>
+    </key>
+    <key name="hide-on-focus-loss" type="b">
+      <summary>Hide the popup when it loses focus</summary>
+      <default>true</default>
+    </key>
+  </schema>
+</schemalist>

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Clipper
+GenericName=Clipboard Manager
+Comment=Windows-style clipboard history — Win+V to open
+Exec=clipper --show
+Icon=clipper
+Categories=Utility;System;
+Keywords=clipboard;history;copy;paste;
+StartupWMClass=clipper

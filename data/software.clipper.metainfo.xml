@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>software.clipper</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Clipper</name>
+  <summary>Windows-style clipboard manager for GNOME</summary>
+  <developer_name>mohrez</developer_name>
+  <launchable type="desktop-id">software.clipper.desktop</launchable>
+  <recommends>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </recommends>
+  <description>
+    <p>
+      Clipper keeps a history of everything you copy — text, code,
+      images &amp; screenshots, files, links and colors — in one beautiful
+      popup. Open it with Win+V, search as you type, pin the things you
+      use often, and paste directly into the window you were typing in,
+      exactly like the Windows clipboard.
+    </p>
+  </description>
+  <url type="homepage">https://github.com/mohrezsheikh/clipper</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>The Clipper popup: search, cards, pinning, clear</caption>
+    </screenshot>
+  </screenshots>
+  <provides>
+    <binary>clipper</binary>
+  </provides>
+  <releases>
+    <release version="0.1.0" date="2026-10-17">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

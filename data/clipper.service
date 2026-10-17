@@ -1,0 +1,12 @@
+[Unit]
+Description=Clipper clipboard manager (background service)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/clipper
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
