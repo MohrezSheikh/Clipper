@@ -226,6 +226,9 @@ export class CaptureManager {
     }
 
     async claim(item) {
+        // any claim we make echoes back as an owner-changed event: mark the
+        // grace window so we don't capture our own content again
+        this._lastPastedAt = Date.now();
         try {
             if (item.kind === KIND_TEXT) {
                 St.Clipboard.get_default().set_content(

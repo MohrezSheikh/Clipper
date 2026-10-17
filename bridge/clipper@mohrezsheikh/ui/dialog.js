@@ -6,7 +6,6 @@ import Cogl from 'gi://Cogl';
 import GdkPixbuf from 'gi://GdkPixbuf';
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
-import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 
@@ -29,6 +28,8 @@ export class ClipperDialog {
 
         this._open = false;
         this._built = false;
+        this._modal = false;
+        this._stageHandler = 0;
         this._rows = [];
         this._selectedIndex = 0;
         this._filterText = '';
@@ -57,23 +58,38 @@ export class ClipperDialog {
     open() {
         if (this._open)
             return;
-        this._build();
-        this._refreshRows();
-        this._position();
-        Main.layoutManager.uiGroup.add_child(this._backdrop);
-        Main.layoutManager.uiGroup.set_child_above_sibling(
-            this._backdrop, null);
-
-        this._backdrop.show();
-        Meta.disable_unredirect_for_display(global.display);
         try {
-            Main.pushModal(this._backdrop, {
+            this._build();
+            this._refreshRows();
+            this._position();
+        } catch (e) {
+            log(`clipper: opening dialog failed: ${e}`);
+            this._destroyChrome();
+            return;
+        }
+        Main.layoutManager.uiGroup.add_child(this._card);
+        Main.layoutManager.uiGroup.set_child_above_sibling(this._card, null);
+        this._card.show();
+
+        // Grab input on the card itself.  An invisible full-stage backdrop
+        // holding the grab is a freeze hazard: if anything below throws,
+        // every input event in the session would be swallowed.
+        try {
+            Main.pushModal(this._card, {
                 actionMode: Shell.ActionMode.POPUP,
                 timestamp: global.get_current_time(),
             });
+            this._modal = true;
         } catch (e) {
-            log(`clipper: pushModal failed: ${e}`);
+            log(`clipper: pushModal failed (opening without grab): ${e}`);
+            this._modal = false;
         }
+
+        // With a stage grab every event funnels through the grabbed actor's
+        // chain, so a captured-event handler on the stage still sees clicks
+        // landing outside the card - use the coordinates to dismiss.
+        this._stageHandler = global.stage.connect('captured-event',
+            this._onGlobalEvent.bind(this));
         this._open = true;
         this._search.grab_key_focus();
     }
@@ -81,16 +97,49 @@ export class ClipperDialog {
     close() {
         if (!this._open)
             return;
-        try {
-            Main.popModal(this._backdrop);
-        } catch {
-            /* the shell may have released the grab already */
-        }
-        const parent = this._backdrop.get_parent();
-        if (parent)
-            parent.remove_child(this._backdrop);
-        Meta.enable_unredirect_for_display(global.display);
+        this._destroyChrome();
         this._open = false;
+    }
+
+    _destroyChrome() {
+        if (this._stageHandler) {
+            try {
+                global.stage.disconnect(this._stageHandler);
+            } catch {
+                /* handler may be gone already */
+            }
+            this._stageHandler = 0;
+        }
+        if (this._modal) {
+            try {
+                Main.popModal(this._card);
+            } catch {
+                /* the shell may have released the grab already */
+            }
+            this._modal = false;
+        }
+        const parent = this._card?.get_parent();
+        if (parent) {
+            try {
+                parent.remove_child(this._card);
+            } catch {
+                /* nothing else we can do here */
+            }
+        }
+    }
+
+    _onGlobalEvent(_stage, event) {
+        if (event.type() !== Clutter.EventType.BUTTON_PRESS &&
+            event.type() !== Clutter.EventType.TOUCH_BEGIN)
+            return Clutter.EVENT_PROPAGATE;
+        const [x, y] = global.get_pointer();
+        const [cx, cy] = this._card.get_position();
+        const [w, h] = this._card.get_size();
+        if (x < cx || x > cx + w || y < cy || y > cy + h) {
+            this.close();
+            return Clutter.EVENT_STOP;
+        }
+        return Clutter.EVENT_PROPAGATE;
     }
 
     setIncognito(enabled) {
@@ -104,25 +153,13 @@ export class ClipperDialog {
         if (this._built)
             return;
 
-        this._backdrop = new St.Widget({
-            name: 'clipper-backdrop',
-            style: 'background-color: rgba(0, 0, 0, 0.01);',
-            reactive: true,
-            x: 0,
-            y: 0,
-            width: global.stage.width,
-            height: global.stage.height,
-        });
-        this._backdrop.connect('button-press-event',
-            this._onOutsideClick.bind(this));
-        this._backdrop.connect('captured-event',
-            this._onCapturedEvent.bind(this));
-
         this._card = new St.BoxLayout({
             style_class: 'clipper-card-dialog',
             vertical: true,
             reactive: true,
         });
+        this._card.connect('captured-event',
+            this._onCapturedEvent.bind(this));
 
         // search bar
         this._search = new St.Entry({
@@ -136,7 +173,9 @@ export class ClipperDialog {
             this._filterText = this._search.text ?? '';
             this._refreshRows();
         });
-        this._search.connect('activate', () => this._pasteSelected());
+        // St.Entry has no `activate` signal; the inner ClutterText does.
+        this._search.get_clutter_text().connect('activate',
+            () => this._pasteSelected());
         this._card.add_child(this._search);
 
         // history list
@@ -186,7 +225,6 @@ export class ClipperDialog {
         footer.add_child(this._incognitoButton);
 
         this._card.add_child(footer);
-        this._backdrop.add_child(this._card);
         this._built = true;
     }
 
@@ -203,10 +241,6 @@ export class ClipperDialog {
     }
 
     /* -------------------------------------------------- events & navigation */
-    _onOutsideClick() {
-        this.close();
-    }
-
     _onCapturedEvent(_actor, event) {
         if (event.type() !== Clutter.EventType.KEY_PRESS)
             return Clutter.EVENT_PROPAGATE;
@@ -245,7 +279,7 @@ export class ClipperDialog {
     _moveSelection(delta) {
         if (this._rows.length === 0)
             return;
-        const index = GLib.clamp(this._selectedIndex + delta,
+        const index = clamp(this._selectedIndex + delta,
             0, this._rows.length - 1);
         this._setSelected(index);
     }
@@ -340,7 +374,7 @@ export class ClipperDialog {
             : '';
 
         const keepIndex = respectIndex
-            ? GLib.clamp(this._selectedIndex, 0, Math.max(0, items.length - 1))
+            ? clamp(this._selectedIndex, 0, Math.max(0, items.length - 1))
             : 0;
         this._selectedIndex = 0;
         if (items.length > 0)
@@ -531,8 +565,8 @@ export class ClipperDialog {
         let y = Math.floor(py + 18);
         if (y + height > area.y + area.height - 24)
             y = py - height - 18;
-        x = GLib.clamp(x, area.x + 12, area.x + area.width - width - 12);
-        y = GLib.clamp(y, area.y + 12, area.y + area.height - height - 12);
+        x = clamp(x, area.x + 12, area.x + area.width - width - 12);
+        y = clamp(y, area.y + 12, area.y + area.height - height - 12);
 
         this._card.set_position(x, y);
         this._card.set_opacity(0);
@@ -592,4 +626,8 @@ function uriFilePath(uri) {
     } catch {
         return uri;
     }
+}
+
+function clamp(value, lower, upper) {
+    return Math.max(lower, Math.min(value, upper));
 }
