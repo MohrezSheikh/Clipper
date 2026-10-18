@@ -39,6 +39,7 @@ export default class ClipperExtension extends Extension {
         this._dialog = new ClipperDialog({
             history: this._history,
             incognito: this._settings.get_boolean('incognito'),
+            hideOnFocusLoss: this._settings.get_boolean('hide-on-focus-loss'),
             onPaste: this._paste.bind(this),
             onCopy: this._copy.bind(this),
             onClear: this._clear.bind(this),
@@ -56,8 +57,42 @@ export default class ClipperExtension extends Extension {
             Shell.ActionMode.ALL,
             () => this._dialog.toggle());
 
+        // the panel must never float over the lock screen
+        this._sessionSignal = Main.sessionMode.connect('updated', () => {
+            if (Main.sessionMode.isLocked || Main.sessionMode.isGreeter)
+                this._dialog?.close();
+        });
+
         this._settingsBind();
         log('clipper: extension enabled');
+    }
+
+    disable() {
+        if (this._sessionSignal) {
+            Main.sessionMode.disconnect(this._sessionSignal);
+            this._sessionSignal = 0;
+        }
+        for (const id of this._settingsSignals ?? []) {
+            try {
+                this._settings.disconnect(id);
+            } catch {
+                /* settings already gone */
+            }
+        }
+        this._settingsSignals = [];
+        try {
+            Main.wm.removeKeybinding('clipper-toggle');
+        } catch (e) {
+            log(`clipper: could not remove the keybinding: ${e}`);
+        }
+        this._capture?.stop();
+        this._capture = null;
+        this._dialog?.destroy();
+        this._dialog = null;
+        this._history = null;
+        this._unloadStylesheet();
+        this._settings = null;
+        log('clipper: extension disabled');
     }
 
     _settingsBind() {
@@ -70,6 +105,10 @@ export default class ClipperExtension extends Extension {
                 'changed::incognito',
                 () => this._dialog.setIncognito(
                     this._settings.get_boolean('incognito'))),
+            this._settings.connect(
+                'changed::hide-on-focus-loss',
+                () => this._dialog.setHideOnFocusLoss(
+                    this._settings.get_boolean('hide-on-focus-loss'))),
         ];
     }
 
@@ -104,10 +143,11 @@ export default class ClipperExtension extends Extension {
 
     /* ---------------------------------------------------------- dialog glue */
     async _paste(item) {
-        this._dialog.close();
-        // let the shell hand focus back to the previous window first
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 90, () => {
-            this._capture.claimAndPaste(item).catch(
+        // close first so the shell hands focus back to the previous window,
+        // then claim the clipboard and type the paste into it
+        this._dialog?.close();
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 120, () => {
+            this._capture?.pasteItem(item).catch(
                 e => log(`clipper: paste failed: ${e}`));
             return GLib.SOURCE_REMOVE;
         });
@@ -115,8 +155,8 @@ export default class ClipperExtension extends Extension {
 
     async _copy(item) {
         try {
-            await this._capture.claim(item);
-            log('clipper: item copied to clipboard (popup stays open)');
+            await this._capture?.claim(item);
+            log('clipper: item copied to clipboard');
         } catch (e) {
             log(`clipper: copy failed: ${e}`);
         }

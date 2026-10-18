@@ -16,8 +16,8 @@ import {KIND_FILES, KIND_IMAGE, KIND_TEXT} from '../lib/storage.js';
 const CODE_HINT_RE = /[{};()\[\]<>]|(^|\n)\s+(def |function |class |import |const |let |var |return |#include|func |SELECT )/;
 
 export class ClipperDialog {
-    constructor({history, incognito, onPaste, onCopy, onClear,
-                 onIncognitoChanged, onOpenFolder}) {
+    constructor({history, incognito, hideOnFocusLoss = true, onPaste, onCopy,
+                 onClear, onIncognitoChanged, onOpenFolder}) {
         this._history = history;
         this._onPaste = onPaste;
         this._onCopy = onCopy;
@@ -25,6 +25,7 @@ export class ClipperDialog {
         this._onIncognitoChanged = onIncognitoChanged;
         this._onOpenFolder = onOpenFolder;
         this._incognito = incognito;
+        this._hideOnFocusLoss = hideOnFocusLoss;
 
         this._open = false;
         this._built = false;
@@ -32,6 +33,14 @@ export class ClipperDialog {
         this._selectedIndex = 0;
         this._filterText = '';
         this._searchText = '';
+        this._displaySignal = 0;
+        this._stageSignal = 0;
+        this._textSignal = 0;
+        this._focusWindowAtOpen = null;
+    }
+
+    setHideOnFocusLoss(enabled) {
+        this._hideOnFocusLoss = enabled;
     }
 
     isOpen() {
@@ -53,42 +62,148 @@ export class ClipperDialog {
             this.open();
     }
 
-    /* Non-blocking panel: no input grab, so other apps stay fully usable
-     * while the history dialog is open.  The user closes it deliberately
-     * (close button, Ctrl+Alt+V again, or Esc while the panel has focus). */
+    /* Non-blocking panel: no input grab, so other apps stay fully usable while
+     * the dialog is open — but it dismisses itself the moment the user turns
+     * to something else (click elsewhere, focus another window, Esc, the
+     * toggle key again, or picking an item), exactly like the Windows panel.
+     * It never keeps the clipboard over the rest of the desktop. */
     open() {
         if (this._open)
             return;
         try {
             this._build();
             this._refreshRows();
-            this._position();
         } catch (e) {
             log(`clipper: opening dialog failed: ${e}`);
             this._destroyChrome();
             return;
         }
-        Main.layoutManager.uiGroup.add_child(this._card);
-        Main.layoutManager.uiGroup.set_child_above_sibling(this._card, null);
-        this._card.show();
-        this._card.connect('key-press-event',
-            this._onCapturedEvent.bind(this));
-        // clicking anywhere on the panel returns keyboard focus to search
-        this._card.connect('button-press-event', () => {
+        try {
+            Main.layoutManager.uiGroup.add_child(this._card);
+            Main.layoutManager.uiGroup.set_child_above_sibling(this._card, null);
+            this._position();
+            this._card.show();
+            this._open = true;
+            this._focusWindowAtOpen = global.display.focus_window ?? null;
+            this._connectDismiss();
             this._search.grab_key_focus();
-            return Clutter.EVENT_PROPAGATE;
-        });
-        this._open = true;
-        this._search.grab_key_focus();
-        log('clipper: dialog opened (non-blocking)');
+        } catch (e) {
+            log(`clipper: showing dialog failed: ${e}`);
+            this.close();
+            return;
+        }
+        log('clipper: dialog opened');
     }
 
     close() {
         if (!this._open)
             return;
-        this._destroyChrome();
         this._open = false;
+        this._destroyChrome();
+        // hand keyboard focus back deterministically (removing the actor from
+        // the stage usually does this too, but be explicit)
+        try {
+            global.stage.set_key_focus(null);
+        } catch {
+            /* stage already gone (shell shutting down) */
+        }
         log('clipper: dialog closed');
+    }
+
+    /* Nothing here grabs input: we only observe.  That is why the panel can
+     * never lock the desktop up, while still disappearing as soon as the user
+     * goes back to their work. */
+    _connectDismiss() {
+        if (this._displaySignal || this._stageSignal || this._textSignal)
+            return;
+        try {
+            this._displaySignal = global.display.connect(
+                'notify::focus-window', () => {
+                    if (!this._open)
+                        return;
+                    const focused = global.display.focus_window;
+                    if (focused && focused !== this._focusWindowAtOpen)
+                        this.close();
+                });
+        } catch (e) {
+            log(`clipper: focus-window watch failed: ${e}`);
+        }
+
+        try {
+            this._stageSignal = global.stage.connect(
+                'captured-event', (_actor, event) => {
+                    if (!this._open ||
+                        event.type() !== Clutter.EventType.BUTTON_PRESS)
+                        return Clutter.EVENT_PROPAGATE;
+                    const [x, y] = event.get_coords();
+                    // let the click through to whatever was clicked
+                    if (!this._overCard(x, y))
+                        this.close();
+                    return Clutter.EVENT_PROPAGATE;
+                });
+        } catch (e) {
+            log(`clipper: outside-click watch failed: ${e}`);
+        }
+
+        try {
+            this._textSignal = this._search.get_clutter_text().connect(
+                'key-focus-out', (_text, next) => {
+                    if (!this._open || !this._hideOnFocusLoss)
+                        return;
+                    if (next && this._card.contains(next))
+                        return;
+                    // focus is leaving the shell UI: close on idle so in-panel
+                    // focus moves are not mistaken for this
+                    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 150, () => {
+                        if (this._open && this._hideOnFocusLoss &&
+                            !this._cardHasFocus())
+                            this.close();
+                        return GLib.SOURCE_REMOVE;
+                    });
+                });
+        } catch (e) {
+            log(`clipper: focus-loss watch failed: ${e}`);
+        }
+    }
+
+    _cardHasFocus() {
+        try {
+            const focused = global.stage.get_key_focus();
+            return !!focused && this._card.contains(focused);
+        } catch {
+            return false;
+        }
+    }
+
+    _overCard(x, y) {
+        try {
+            const [cx, cy] = this._card.get_transformed_position();
+            const [cw, ch] = this._card.get_transformed_size();
+            return x >= cx && x <= cx + cw && y >= cy && y <= cy + ch;
+        } catch {
+            return false;
+        }
+    }
+
+    destroy() {
+        this.close();
+        if (this._displaySignal) {
+            global.display.disconnect(this._displaySignal);
+            this._displaySignal = 0;
+        }
+        if (this._stageSignal) {
+            global.stage.disconnect(this._stageSignal);
+            this._stageSignal = 0;
+        }
+        if (this._textSignal) {
+            this._search?.get_clutter_text().disconnect(this._textSignal);
+            this._textSignal = 0;
+        }
+        this._card?.destroy();
+        this._card = null;
+        this._search = null;
+        this._built = false;
+        this._rows = [];
     }
 
     _destroyChrome() {
@@ -247,11 +362,6 @@ export class ClipperDialog {
             this._moveSelection(-1);
             return Clutter.EVENT_STOP;
         }
-        if ((symbol === Clutter.KEY_Return || symbol === Clutter.KEY_KP_Enter) &&
-            !control && this._rows.length > 0) {
-            this._pasteSelected();
-            return Clutter.EVENT_STOP;
-        }
         if (symbol === Clutter.KEY_s && control) {
             this._pinSelected();
             return Clutter.EVENT_STOP;
@@ -346,11 +456,15 @@ export class ClipperDialog {
             this._listBox.add_child(this._buildRow(item).row);
 
         if (items.length === 0) {
+            const filtered = (this._filterText ?? '').trim().length > 0;
             const empty = new St.Label({
                 style_class: 'clipper-empty clipper-text',
                 text: this._incognito
                     ? 'Incognito is on — nothing new is recorded.'
-                    : 'Clipboard history is empty.\nCopy something or take a screenshot.',
+                    : filtered
+                        ? `No items match “${this._filterText.trim()}”.`
+                        : 'Nothing copied yet.\n' +
+                          'Copy text or take a screenshot, then press Ctrl+Alt+V.',
             });
             this._listBox.add_child(empty);
         }

@@ -26,10 +26,17 @@ on GNOME Wayland.
 - **Pinned items always stay on top** with a pin highlight; unpinned history
   flows below them, newest first.
 - **Windows-style paste**: Enter or clicking a card puts the item on the
-  clipboard and sends Ctrl+V into the previously focused window.
+  clipboard and types the paste shortcut into the previously focused window
+  (`Ctrl+V`, or `Ctrl+Shift+Insert` in a terminal). Turn it off with
+  `auto-paste` to only copy.
+- **It never gets in your way**: the popup takes no input grab, so other
+  applications stay fully usable while it is open, and it dismisses itself the
+  moment you go back to work — click anywhere outside, focus another window,
+  press Esc, press Ctrl+Alt+V again, or pick an item. No "stuck overlay".
 - **Keyboard-first**: type to search, arrows to move, Enter to paste, Ctrl+S
   to pin, Delete to remove, Esc to dismiss.
-- **Incognito toggle** in the footer stops recording (handy for passwords).
+- **Incognito toggle** in the footer stops recording (handy for passwords);
+  password-manager clipboard offers are never recorded at all.
 - **Clear** in the footer empties the unpinned history; pinned items survive.
 - Everything stays local: history JSON plus the image cache under
   `~/.local/share/Clipper/`.
@@ -40,7 +47,7 @@ Download the newest `clipper_*_all.deb` from
 [Releases](https://github.com/mohrezsheikh/clipper/releases) and run:
 
 ```bash
-sudo apt install ./clipper_0.1.0_all.deb
+sudo apt install ./clipper_0.2.3_all.deb
 ```
 
 Then **log out and back in once** (a GNOME extension always needs a fresh
@@ -67,7 +74,8 @@ Uninstall: `./uninstall.sh` (add `--purge` to remove your history data, too).
 | Copy button on card  | Copy without pasting                      |
 | Ctrl+S               | Pin / unpin the selected item             |
 | Delete               | Remove the selected item                  |
-| Right-click row      | Copy / pin / delete / open folder         |
+| Folder button        | Open the containing folder (images/files)  |
+| Click outside        | Dismiss the popup, without blocking the app|
 | Esc                  | Dismiss the popup                         |
 
 ## The shortcut
@@ -101,11 +109,15 @@ dist/deb.sh                    builds the .deb (one command)
 - **Ctrl+Alt+V shows nothing after install** — a fresh session is
   required (the extension must load anew). Run
   `./install.sh` again if unsure, then log out/in once.
-- **Write about what you copied, but nothing appears** — history is written
-  on capture; check the shell log: `journalctl --user | grep clipper`.
+- **Copied something but it is not in the list** — check that Incognito is off
+  (the footer button shows the state) and look at the shell log:
+  `journalctl --user -b | grep clipper`. Every accepted item logs
+  `captured text/image/file(s)`.
 - **A competing manager installed** (for example **clipboard-indicator**) —
   install.sh offers to disable it; having two active managers causes
   duplicate captures.
+- **Unreadable `[boxed instance wrapper …]` entries in the list** — those came
+  from a decoding bug fixed in 0.2.3; press Clear once to drop them.
 - **Where is my data?** `~/.local/share/Clipper/history.json` and
   `~/.local/share/Clipper/images/`.
 

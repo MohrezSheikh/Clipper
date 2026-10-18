@@ -1,7 +1,8 @@
 {
     "uuid": "clipper@mohrezsheikh",
-    "name": "Clipper Clipboard Bridge",
-    "description": "Tiny companion for the Clipper clipboard manager: feeds clipboard events (text/images/files) to the Clipper app over DBus, registers the toggle keybinding (default Ctrl+Alt+V), and injects Ctrl+V on paste. Use the Clipper app for settings.",
+    "name": "Clipper",
+    "description": "Clipboard history for GNOME, in the style of the Windows clipboard panel. Keeps text, links, code, images/screenshots (saved to disk) and copied files, opens a searchable popup with a hotkey (default Ctrl+Alt+V), lets you pin the entries you use most so they stay on top, and pastes the selected entry straight into the window you were working in.",
     "shell-version": ["45", "46", "47", "48", "49"],
+    "settings-schema": "io.github.mohrezsheikh.clipper",
     "url": "https://github.com/mohrezsheikh/clipper"
 }
