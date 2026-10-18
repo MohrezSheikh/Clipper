@@ -432,6 +432,8 @@ export class ClipperDialog {
 
     /* ------------------------------------------------------- content views */
     _contentWidget(item) {
+        if (item.kind === KIND_TEXT && looksLikeUrl(item.content))
+            return this._urlView(item);
         if (item.kind === KIND_TEXT)
             return this._textView(item);
         if (item.kind === KIND_IMAGE)
@@ -447,7 +449,10 @@ export class ClipperDialog {
             style_class: code ? 'clipper-code' : 'clipper-plain',
             vertical: true,
         });
-        box.add_child(this._textLabel(clipText(item.content, 420), code));
+        if (code)
+            box.add_child(this._codeLabel(item.content));
+        else
+            box.add_child(this._textLabel(clipText(item.content, 420)));
         box.add_child(new St.Label({
             style_class: 'clipper-meta',
             text: `${relTime(item.date)}` +
@@ -461,6 +466,43 @@ export class ClipperDialog {
             style_class: mono ? 'clipper-text clipper-mono' : 'clipper-text',
             text,
         });
+    }
+
+    _urlView(item) {
+        const url = item.content.trim();
+        const box = new St.BoxLayout({
+            style_class: 'clipper-files-box',
+            vertical: true,
+        });
+        const head = new St.BoxLayout({
+            style_class: 'clipper-head',
+            vertical: false,
+        });
+        head.add_child(new St.Icon({
+            icon_name: 'web-browser-symbolic', icon_size: 15,
+        }));
+        head.add_child(new St.Label({
+            style_class: 'clipper-text',
+            text: urlHost(url),
+        }));
+        box.add_child(head);
+        box.add_child(new St.Label({
+            style_class: 'clipper-meta',
+            text: `${clipUrlPath(url, 120)}  ·  ${relTime(item.date)}` +
+                  `${item.count > 1 ? `  ·  ×${item.count}` : ''}`,
+        }));
+        return box;
+    }
+
+    /* Code cards in Copyous style: a dim line-number gutter plus lightweight
+     * syntax highlighting via Pango markup (keywords, strings, numbers,
+     * comments).  Text is escaped first, so markup stays well-formed. */
+    _codeLabel(content) {
+        const lines = codePreviewLines(content, 8);
+        const label = new St.Label({style_class: 'clipper-text clipper-mono'});
+        label.clutter_text.set_use_markup(true);
+        label.clutter_text.set_markup(annotateCodeLines(lines));
+        return label;
     }
 
     _imageView(item) {
@@ -492,7 +534,8 @@ export class ClipperDialog {
 
     _makeThumb(path) {
         try {
-            const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 360, 180);
+            // near full-card width, like the reference manager
+            const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(path, 430, 230);
             const image = new Clutter.Image();
             image.set_data(pixbuf.get_pixels(),
                 pixbuf.get_has_alpha()
@@ -619,4 +662,75 @@ function uriFilePath(uri) {
 
 function clamp(value, lower, upper) {
     return Math.max(lower, Math.min(value, upper));
+}
+
+/* ------------------------------------------------- code & url renderers */
+function escapePango(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function codePreviewLines(content, maxLines) {
+    const all = content.split('\n');
+    const out = all.slice(0, maxLines).map(l => l.replace(/[ \t]+$/, ''));
+    if (all.length > maxLines)
+        out.push('…');
+    return out;
+}
+
+const CODE_TOKEN_RE = new RegExp(
+    '(/(?:[^/\\\n]|\\.)+/|(?:"(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|`(?:[^`\\\\]|\\\\.)*`))' +
+    '|(#[^\n]*|//[^\n]*|--[^\n]*)' +
+    '|\\b\\d+(?:[.]\\d+)?\\b' +
+    "|\\b(def|class|import|from|export|return|if|elif|else|for|while|function|lambda|const|let|var|pub|fn|enum|struct|impl|trait|match|use|package|type|interface|async|await|new|this|self|None|True|False|null|undefined|true|false|SELECT|FROM|WHERE|INSERT|UPDATE|DELETE)\\b",
+    'g');
+
+const KEYWORDS = new Set('def class import from export return if elif else for while function lambda const let var pub fn enum struct impl trait match use package type interface async await new this self None True False null undefined true false SELECT FROM WHERE INSERT UPDATE DELETE'.split(' '));
+
+function highlightLine(escapedLine) {
+    // single pass: strings+regexes, comments, numbers, keywords -> spans.
+    return escapedLine.replace(CODE_TOKEN_RE, token => {
+        let color;
+        if (KEYWORDS.has(token))
+            color = '#ff8578';
+        else if (token.startsWith('#') || token.startsWith('//') ||
+                 token.startsWith('--'))
+            color = '#8b949e';
+        else if (/^\d/.test(token))
+            color = '#d2a8ff';
+        else
+            color = '#a5b6d9';
+        return `<span foreground="${color}">${token}</span>`;
+    });
+}
+
+function annotateCodeLines(lines) {
+    const gutterWidth = String(lines.length).length;
+    return lines.map((line, index) => {
+        const number = String(index + 1).padStart(gutterWidth, ' ');
+        return `<span foreground="#5f6672">${number}</span>  ` +
+            highlightLine(escapePango(line));
+    }).join('\n');
+}
+
+function looksLikeUrl(text) {
+    const t = (text ?? '').trim();
+    if (!t || '\n' in t || t.length > 800 || /\s/.test(t))
+        return false;
+    return /^https?:\/\//i.test(t) || /^www\./i.test(t) || /^(mailto:|ftp:\/\/)/i.test(t);
+}
+
+function urlHost(url) {
+    try {
+        const parsed = GLib.uri_parse(url, GLib.UriFlags.NONE);
+        return parsed?.get_host() ?? url;
+    } catch {
+        return url;
+    }
+}
+
+function clipUrlPath(url, max) {
+    return url.length > max ? `…${url.slice(url.length - max)}` : url;
 }
