@@ -1,128 +1,251 @@
-/* Clipper dialog styling (St CSS inside GNOME Shell) */
+/* Clipper panel styling (St CSS, rendered inside GNOME Shell).
+ *
+ * Two rules keep this panel looking like part of the desktop:
+ *   - the font family is the one the Shell itself uses (Ubuntu on Ubuntu /
+ *     Debian themes) and sizes are in em, so the panel follows the user's
+ *     font-size setting instead of hard-coding a scale;
+ *   - every interactive control shares one height (.clipper-button and
+ *     .clipper-icon-button, both 26px), so header and footer line up exactly
+ *     whatever icon or label sits inside them.
+ *
+ * Rows carry a constant 3px left border: selection and pin state only change
+ * its colour, never the geometry, so moving through the list does not make the
+ * text jump sideways.
+ *
+ * Two palettes live in this one file.  The rules above the "light palette"
+ * marker are dark (the default); the light section re-states every rule that
+ * paints a colour, scoped by the .clipper-theme-light class the extension puts
+ * on the panel.  Keeping both in one stylesheet means switching appearance is
+ * a class swap on a live actor — no stylesheet reload, no flicker.
+ */
 
 .clipper-card-dialog {
-    background-color: rgba(30, 30, 34, 0.98);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
-    padding: 10px;
-    color: #f2f2f5;
-}
-
-.clipper-search {
-    background-color: rgba(255, 255, 255, 0.07);
-    border-radius: 10px;
-    padding: 4px 8px;
-    font-size: 14px;
-    margin-bottom: 8px;
-}
-
-.clipper-scroll {
-    background-color: transparent;
-}
-
-.clipper-list {
-    spacing: 8px;
-    padding: 2px 2px 6px 2px;
-}
-
-.clipper-item {
-    background-color: rgba(255, 255, 255, 0.055);
+    background-color: rgba(28, 28, 32, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.09);
     border-radius: 16px;
-    padding: 12px;
-    spacing: 8px;
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+    padding: 8px;
+    color: #f4f4f6;
+    font-family: "Ubuntu", "Ubuntu Sans", "Cantarell", "Noto Sans",
+                 "DejaVu Sans", sans-serif;
 }
 
-.clipper-item:hover {
-    background-color: rgba(255, 255, 255, 0.09);
+/* ----------------------------------------------------------- controls */
+/* the grabber at the very top: the panel is movable, and this is the bit
+ * that says so.  Dragging works from any non-control part of the panel —
+ * the pill is the affordance, not the only handle. */
+.clipper-grip {
+    min-width: 36px;
+    min-height: 3px;
+    border-radius: 2px;
+    background-color: rgba(244, 244, 246, 0.22);
+    margin: 2px 0 5px 0;
 }
 
-.clipper-item.clipper-selected {
-    background-color: rgba(83, 133, 252, 0.25);
-    border-width: 0;
-    border-left-width: 3px;
-    border-left-color: #5385fc;
-    border-left-style: solid;
+/* the gap below the bar belongs to the bar itself: a margin on the entry
+ * instead would make it taller than the close button and push it off-centre */
+.clipper-topbar {
+    spacing: 6px;
+    margin-bottom: 6px;
 }
 
-.clipper-item.clipper-pinned {
-    background-color: rgba(255, 179, 71, 0.16);
+.clipper-incognito-row {
+    spacing: 5px;
 }
 
-.clipper-item-body {
-    color: #f2f2f5;
-    background: transparent;
-    box-shadow: none;
-    border: none;
-}
-
-.clipper-text {
-    font-size: 13.5px;
-}
-
-.clipper-mono {
-    font-family: "JetBrains Mono", "Fira Mono", "Noto Sans Mono", monospace;
-    font-size: 12.5px;
-    color: #d6e2f0;
-}
-
-.clipper-plain .clipper-text,
-.clipper-code .clipper-text {
-    margin-bottom: 4px;
-}
-
-.clipper-meta {
-    font-size: 11px;
-    color: rgba(242, 242, 245, 0.55);
-}
-
-.clipper-thumb {
-    border-radius: 12px;
-    margin: 2px 0 6px 0;
-}
-
-.clipper-image-box {
-    spacing: 4px;
-}
-
-.clipper-head {
-    spacing: 8px;
-}
-
-.clipper-files-box {
-    spacing: 4px;
-}
-
-.clipper-empty {
-    font-size: 13px;
-    color: rgba(242, 242, 245, 0.6);
-    padding: 28px 12px;
-}
-
-.clipper-footer {
-    padding: 8px 2px 0 2px;
-    spacing: 8px;
-}
-
-.clipper-hint {
-    font-size: 11px;
-    color: rgba(242, 242, 245, 0.45);
+.clipper-button,
+.clipper-icon-button {
+    min-height: 26px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #f4f4f6;
+    font-size: 0.85em;
+    font-weight: 500;
+    transition-duration: 100ms;
 }
 
 .clipper-button {
-    background-color: rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 4px 10px;
-    font-size: 12.5px;
-    color: #f2f2f5;
+    padding: 0 10px;
 }
 
-.clipper-button:hover {
-    background-color: rgba(255, 255, 255, 0.14);
+.clipper-icon-button {
+    min-width: 26px;
+    padding: 0;
+}
+
+.clipper-button StLabel,
+.clipper-icon-button StLabel {
+    font-size: 0.85em;
+    font-weight: 500;
+}
+
+.clipper-button:hover,
+.clipper-icon-button:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.clipper-button:active,
+.clipper-icon-button:active {
+    background-color: rgba(255, 255, 255, 0.22);
+}
+
+.clipper-close {
+    color: rgba(244, 244, 246, 0.8);
 }
 
 .clipper-button.clipper-incognito-on {
     background-color: rgba(255, 179, 71, 0.22);
+    color: #ffd6a0;
+}
+
+/* ------------------------------------------------------------- search */
+.clipper-search {
+    background-color: rgba(255, 255, 255, 0.07);
+    border: 1px solid transparent;
+    border-radius: 9px;
+    min-height: 26px;
+    padding: 4px 9px;
+    font-size: 0.92em;
+    transition-duration: 100ms;
+}
+
+.clipper-search:focus {
+    background-color: rgba(255, 255, 255, 0.11);
+    border-color: rgba(83, 133, 252, 0.75);
+}
+
+.clipper-search-icon {
+    color: rgba(244, 244, 246, 0.5);
+    icon-size: 13px;
+}
+
+.clipper-search StLabel.hint-text {
+    color: rgba(244, 244, 246, 0.4);
+}
+
+/* --------------------------------------------------------------- list */
+.clipper-scroll {
+    background-color: transparent;
+}
+
+/* The scrollbar belongs to the *Shell's* stylesheet, not to this panel: its
+ * handle is painted in the Shell theme's own grey (#5e5e5e on Yaru's dark
+ * theme), so on the light panel it showed up as a dark streak floating over
+ * the cards whenever the history was long enough to scroll.  Restating it here
+ * keeps it thin and in the panel's own palette.  Everything is scoped under
+ * .clipper-card-dialog so no other scrollbar in the Shell is affected. */
+.clipper-card-dialog .clipper-scroll StScrollBar {
+    padding: 0;
+    min-width: 10px;
+}
+
+/* both spellings on purpose: current Shell themes style the handle through the
+ * .vhandle class, older ones through the #vhandle id */
+.clipper-card-dialog .clipper-scroll StScrollBar > .vhandle,
+.clipper-card-dialog .clipper-scroll StScrollBar StButton#vhandle {
+    background-color: rgba(255, 255, 255, 0.22);
+    border-width: 0;
+    border-radius: 2px;
+    min-width: 4px;
+    min-height: 44px;
+    margin: 4px 3px;
+    transition-duration: 200ms;
+}
+
+.clipper-card-dialog .clipper-scroll StScrollBar > .vhandle:hover,
+.clipper-card-dialog .clipper-scroll StScrollBar StButton#vhandle:hover {
+    background-color: rgba(255, 255, 255, 0.4);
+}
+
+.clipper-card-dialog .clipper-scroll StScrollBar > .vhandle:active,
+.clipper-card-dialog .clipper-scroll StScrollBar StButton#vhandle:active {
+    background-color: rgba(255, 255, 255, 0.55);
+}
+
+.clipper-list {
+    spacing: 6px;
+    padding: 2px 3px 4px 2px;
+}
+
+.clipper-item {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    border-left: 3px solid rgba(0, 0, 0, 0);
+    padding: 8px 10px;
+    spacing: 8px;
+    transition-duration: 100ms;
+}
+
+.clipper-item:hover {
+    background-color: rgba(255, 255, 255, 0.085);
+}
+
+.clipper-item.clipper-selected {
+    background-color: rgba(83, 133, 252, 0.2);
+    border-left-color: #5385fc;
+}
+
+.clipper-item.clipper-pinned {
+    background-color: rgba(255, 179, 71, 0.13);
+    border-left-color: #ffb347;
+}
+
+.clipper-item.clipper-pinned:hover {
+    background-color: rgba(255, 179, 71, 0.19);
+}
+
+/* the transient selection wins over the pin accent */
+.clipper-item.clipper-pinned.clipper-selected {
+    background-color: rgba(83, 133, 252, 0.2);
+    border-left-color: #5385fc;
+}
+
+.clipper-item-body {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    color: #f4f4f6;
+}
+
+.clipper-text {
+    font-size: 0.92em;
+}
+
+.clipper-mono {
+    font-family: "Ubuntu Mono", "JetBrains Mono", "DejaVu Sans Mono",
+                 monospace;
+    font-size: 0.85em;
+    color: #cfdcef;
+}
+
+.clipper-plain,
+.clipper-code {
+    spacing: 2px;
+}
+
+.clipper-plain .clipper-text,
+.clipper-code .clipper-text {
+    margin-bottom: 3px;
+}
+
+.clipper-meta {
+    font-size: 0.75em;
+    color: rgba(244, 244, 246, 0.5);
+}
+
+.clipper-head {
+    spacing: 7px;
+}
+
+.clipper-files-box,
+.clipper-image-box {
+    spacing: 3px;
+}
+
+.clipper-thumb {
+    border-radius: 10px;
+    margin: 1px 0 5px 0;
 }
 
 .clipper-actions {
@@ -130,12 +253,182 @@
 }
 
 .clipper-mini-button {
+    min-width: 24px;
+    min-height: 24px;
+    padding: 0;
+    border-radius: 7px;
     background-color: rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    padding: 5px;
-    color: rgba(242, 242, 245, 0.75);
+    color: rgba(244, 244, 246, 0.72);
+    transition-duration: 100ms;
 }
 
 .clipper-mini-button:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+    background-color: rgba(255, 255, 255, 0.15);
+    color: #f4f4f6;
+}
+
+.clipper-mini-button.clipper-mini-active {
+    background-color: rgba(255, 179, 71, 0.22);
+    color: #ffcf94;
+}
+
+.clipper-empty {
+    font-size: 0.88em;
+    color: rgba(244, 244, 246, 0.55);
+    padding: 22px 10px;
+}
+
+/* ------------------------------------------------------------- footer */
+.clipper-footer {
+    padding: 7px 2px 0 2px;
+    spacing: 6px;
+}
+
+.clipper-hint {
+    font-size: 0.75em;
+    color: rgba(244, 244, 246, 0.42);
+}
+
+/* ---------------------------------------------------------- light palette
+ * Every rule that paints something is restated here.  The scoping class is
+ * added by the extension when the appearance setting resolves to light, so
+ * these selectors are always more specific than their dark counterparts.
+ * Values follow GNOME's own light theme (Yaru/Adwaita): near-white surfaces,
+ * near-black text, the same blue and amber accents as the dark palette so
+ * selection and pin states stay recognisable. */
+.clipper-card-dialog.clipper-theme-light {
+    background-color: rgba(250, 250, 252, 0.97);
+    border-color: rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 34px rgba(0, 0, 0, 0.22);
+    color: #1c1c1e;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-grip {
+    background-color: rgba(28, 28, 30, 0.2);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-button,
+.clipper-card-dialog.clipper-theme-light .clipper-icon-button {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #1c1c1e;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-button:hover,
+.clipper-card-dialog.clipper-theme-light .clipper-icon-button:hover {
+    background-color: rgba(0, 0, 0, 0.11);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-button:active,
+.clipper-card-dialog.clipper-theme-light .clipper-icon-button:active {
+    background-color: rgba(0, 0, 0, 0.16);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-close {
+    color: rgba(28, 28, 30, 0.75);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-button.clipper-incognito-on {
+    background-color: rgba(229, 165, 10, 0.22);
+    color: #7a5200;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-search {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-search:focus {
+    background-color: rgba(0, 0, 0, 0.08);
+    border-color: rgba(28, 113, 216, 0.7);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-search-icon {
+    color: rgba(28, 28, 30, 0.5);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-search StLabel.hint-text {
+    color: rgba(28, 28, 30, 0.42);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item {
+    background-color: rgba(0, 0, 0, 0.045);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item:hover {
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item.clipper-selected {
+    background-color: rgba(28, 113, 216, 0.16);
+    border-left-color: #1c71d8;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item.clipper-pinned {
+    background-color: rgba(229, 165, 10, 0.16);
+    border-left-color: #e5a50a;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item.clipper-pinned:hover {
+    background-color: rgba(229, 165, 10, 0.22);
+}
+
+.clipper-card-dialog.clipper-theme-light
+.clipper-item.clipper-pinned.clipper-selected {
+    background-color: rgba(28, 113, 216, 0.16);
+    border-left-color: #1c71d8;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-item-body {
+    color: #1c1c1e;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-mono {
+    color: #204a87;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-meta {
+    color: rgba(28, 28, 30, 0.55);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-mini-button {
+    background-color: rgba(0, 0, 0, 0.05);
+    color: rgba(28, 28, 30, 0.72);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-mini-button:hover {
+    background-color: rgba(0, 0, 0, 0.11);
+    color: #1c1c1e;
+}
+
+.clipper-card-dialog.clipper-theme-light
+.clipper-mini-button.clipper-mini-active {
+    background-color: rgba(229, 165, 10, 0.22);
+    color: #7a5200;
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-empty {
+    color: rgba(28, 28, 30, 0.6);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-hint {
+    color: rgba(28, 28, 30, 0.52);
+}
+
+.clipper-card-dialog.clipper-theme-light .clipper-scroll StScrollBar > .vhandle,
+.clipper-card-dialog.clipper-theme-light
+.clipper-scroll StScrollBar StButton#vhandle {
+    background-color: rgba(28, 28, 30, 0.24);
+}
+
+.clipper-card-dialog.clipper-theme-light
+.clipper-scroll StScrollBar > .vhandle:hover,
+.clipper-card-dialog.clipper-theme-light
+.clipper-scroll StScrollBar StButton#vhandle:hover {
+    background-color: rgba(28, 28, 30, 0.42);
+}
+
+.clipper-card-dialog.clipper-theme-light
+.clipper-scroll StScrollBar > .vhandle:active,
+.clipper-card-dialog.clipper-theme-light
+.clipper-scroll StScrollBar StButton#vhandle:active {
+    background-color: rgba(28, 28, 30, 0.58);
 }

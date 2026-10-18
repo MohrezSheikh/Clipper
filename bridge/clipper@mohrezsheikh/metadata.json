@@ -1,8 +1,9 @@
 {
     "uuid": "clipper@mohrezsheikh",
     "name": "Clipper",
-    "description": "Clipboard history for GNOME, in the style of the Windows clipboard panel. Keeps text, links, code, images/screenshots (saved to disk) and copied files, opens a searchable popup with a hotkey (default Ctrl+Alt+V), lets you pin the entries you use most so they stay on top, and pastes the selected entry straight into the window you were working in.",
+    "description": "Clipboard history for GNOME, in the style of the Windows clipboard panel. Keeps text, links, code, images/screenshots (saved to disk) and copied files, opens a searchable movable popup with a hotkey (default Ctrl+Alt+V), pastes the entry you pick straight into the window you were working in, follows your light or dark desktop, and lets you pin the entries you use most so they stay on top.",
+    "version-name": "0.3.1",
     "shell-version": ["45", "46", "47", "48", "49"],
     "settings-schema": "io.github.mohrezsheikh.clipper",
-    "url": "https://github.com/mohrezsheikh/clipper"
+    "url": "https://github.com/MohrezSheikh/Clipper"
 }

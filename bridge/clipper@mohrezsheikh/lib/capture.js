@@ -304,26 +304,77 @@ export class CaptureManager {
     }
 
     /* Windows-style: put the item back on the clipboard and type paste into
-     * whatever window has focus (only when auto-paste is enabled). */
+     * whatever window has focus (only when auto-paste is enabled).  Picking an
+     * item in the panel therefore *is* the paste — the user never presses
+     * Ctrl+V, and the copy chip stays available for "copy but do not paste". */
     async pasteItem(item) {
         const claimed = await this.claim(item);
         if (!claimed) {
             log(`clipper: could not claim clipboard for ${item.kind}`);
             return false;
         }
-        if (!this._settings?.get_boolean('auto-paste'))
+        if (!this._settings?.get_boolean('auto-paste')) {
+            log('clipper: auto-paste is off — item left on the clipboard');
             return true;
-        await new Promise(resolve => GLib.timeout_add(
-            GLib.PRIORITY_DEFAULT, 250, () => (resolve(), GLib.SOURCE_REMOVE)));
-        this._injectPaste();
-        return true;
+        }
+        // the window that will receive the keystroke has to be the focused one
+        // again, and it has to have seen the new clipboard content first
+        const focused = await this._waitForFocus();
+        if (!focused)
+            log('clipper: no focused window to paste into, clipboard only');
+        await delay(220);
+        const sent = this._injectPaste();
+        log(sent
+            ? `clipper: pasted ${item.kind} into the focused window`
+            : 'clipper: could not send the paste keystroke');
+        return sent;
+    }
+
+    /* The panel is deliberately non-modal, so the app underneath keeps the
+     * keyboard focus the whole time and this returns at once.  The wait only
+     * matters when the shell itself holds focus (hotkey pressed in the
+     * overview, or right after a shell dialog closed). */
+    async _waitForFocus(timeout = 600) {
+        const deadline = Date.now() + timeout;
+        while (Date.now() < deadline) {
+            try {
+                if (global.display.focus_window)
+                    return true;
+            } catch {
+                return false;
+            }
+            await delay(40);
+        }
+        return false;
+    }
+
+    /* The seat is reachable from two places depending on the shell version;
+     * both are tried because a paste that silently does nothing is far worse
+     * than a log line here. */
+    _seat() {
+        const routes = [
+            () => Clutter.get_default_backend?.()?.get_default_seat?.(),
+            () => global.stage.get_context().get_backend().get_default_seat(),
+        ];
+        for (const route of routes) {
+            try {
+                const seat = route();
+                if (seat)
+                    return seat;
+            } catch (e) {
+                log(`clipper: no seat through this route: ${e}`);
+            }
+        }
+        return null;
     }
 
     _injectPaste() {
         try {
-            const backend = Clutter.get_default_backend?.() ??
-                global.stage.get_context().get_backend();
-            const seat = backend.get_default_seat();
+            const seat = this._seat();
+            if (!seat) {
+                log('clipper: no input seat, cannot inject the paste');
+                return false;
+            }
             this._device ??= seat.create_virtual_device(
                 Clutter.InputDeviceType.KEYBOARD_DEVICE);
             const device = this._device;
@@ -342,14 +393,24 @@ export class CaptureManager {
             const time = Clutter.get_current_event_time() * 1000 ||
                 GLib.get_monotonic_time();
 
+            log(`clipper: injecting ${terminal ? 'Ctrl+Shift+Insert' : 'Ctrl+V'}`);
             for (const key of keys)
                 device.notify_keyval(time, key, Clutter.KeyState.PRESSED);
+            // a press and release sharing one timestamp is dropped by some
+            // toolkits, so the release goes in a moment later
             for (const key of keys.slice().reverse())
-                device.notify_keyval(time, key, Clutter.KeyState.RELEASED);
+                device.notify_keyval(time + 1000, key, Clutter.KeyState.RELEASED);
+            return true;
         } catch (e) {
             log(`clipper: paste injection failed: ${e}`);
+            return false;
         }
     }
+}
+
+function delay(ms) {
+    return new Promise(resolve => GLib.timeout_add(
+        GLib.PRIORITY_DEFAULT, ms, () => (resolve(), GLib.SOURCE_REMOVE)));
 }
 
 /* ---------------------------------------------------------------- helpers */

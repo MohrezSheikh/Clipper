@@ -24,8 +24,7 @@ function histFile() {
 }
 
 /* make_directory_with_parents() raises G_IO_ERROR_EXISTS when the directory is
- * already there, which used to make every image capture after the first one
- * fail with "Error creating directory ... File exists". */
+ * already there, so the existence check is required, not an optimisation. */
 function ensureDir(file) {
     try {
         if (!file.query_exists(null))
@@ -151,8 +150,14 @@ export class ClipperHistory {
         if (!item)
             return null;
         item.pinned = !item.pinned;
+        // The moment an entry was pinned is tracked apart from the moment it
+        // was copied.  Pinning still lifts it to the top of the pinned group,
+        // but the capture time is left untouched, so unpinning drops it back
+        // into its real place in the history instead of stranding it on top.
         if (item.pinned)
-            item.date = Date.now(); // bounce pinned item to top of pinned group
+            item.pinnedAt = Date.now();
+        else
+            delete item.pinnedAt;
         this.save();
         return item;
     }
@@ -190,10 +195,12 @@ export class ClipperHistory {
                 return label.toLowerCase().includes(needle);
             });
         }
-        // pinned on top, then recency
+        // pinned on top, then recency; pinned entries are ordered by when they
+        // were pinned, everything else by when it was copied
+        const rank = item => Number(item.pinnedAt) || Number(item.date) || 0;
         return result.slice().sort((a, b) =>
             (Number(b.pinned) || 0) - (Number(a.pinned) || 0) ||
-            (Number(b.date) || 0) - (Number(a.date) || 0));
+            rank(b) - rank(a));
     }
 
     all() {

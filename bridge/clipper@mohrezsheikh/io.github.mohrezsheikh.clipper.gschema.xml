@@ -2,12 +2,12 @@
 <schemalist>
   <schema id="io.github.mohrezsheikh.clipper" path="/io/github/mohrezsheikh/clipper/">
     <key name="clipper-toggle" type="as">
-      <summary>Keybinding to toggle the Clipper popup</summary>
+      <summary>Shortcut that opens the Clipper panel</summary>
+      <description>
+        Single-element list of accelerators, as GNOME Shell expects. Editable
+        from the extension's preferences window; Ctrl+Alt+V by default.
+      </description>
       <default><![CDATA[['<Control><Alt>v']]]></default>
-    </key>
-    <key name="theme" type="s">
-      <summary>UI theme: system, light or dark</summary>
-      <default>'system'</default>
     </key>
     <key name="history-limit" type="i">
       <summary>Maximum number of unpinned items kept in history</summary>
@@ -24,6 +24,22 @@
     <key name="hide-on-focus-loss" type="b">
       <summary>Hide the popup when it loses focus</summary>
       <default>true</default>
+    </key>
+    <key name="theme" type="s">
+      <summary>Panel appearance: system, light or dark</summary>
+      <description>
+        'system' follows org.gnome.desktop.interface (color-scheme, and the
+        gtk-theme name on older setups), 'light' and 'dark' pin one palette.
+      </description>
+      <default>'system'</default>
+    </key>
+    <key name="panel-position" type="(ii)">
+      <summary>Where the panel was last dragged to, 0 0 for "next to the pointer"</summary>
+      <description>
+        Set by dragging the panel. Zero means the panel is not pinned to a
+        place and opens at the pointer, which is the default.
+      </description>
+      <default>(0, 0)</default>
     </key>
   </schema>
 </schemalist>

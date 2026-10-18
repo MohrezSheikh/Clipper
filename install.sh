@@ -88,6 +88,6 @@ info "installed."
 cat <<EOF
 
   One final step: log out and back in once (a GNOME extension needs a
-  fresh Shell session to load), then press Win+V and start copying.
+  fresh Shell session to load), then press Ctrl+Alt+V and start copying.
 
 EOF

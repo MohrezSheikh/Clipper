@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Build the Clipper .deb package (GNOME Shell extension edition).
 #
-#   ./dist/deb.sh            -> dist/clipper_0.1.0_all.deb
-#   ./dist/deb.sh 0.2.0      -> dist/clipper_0.2.0_all.deb
+#   ./dist/deb.sh            -> dist/clipper_0.3.1_all.deb
+#   ./dist/deb.sh 0.3.1      -> dist/clipper_0.3.1_all.deb
 #
 # Installs the extension system-wide so people can run one command:
 #   sudo apt install ./clipper_X.Y.Z_all.deb
 set -euo pipefail
 
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-0.1.0}"
+VERSION="${1:-0.3.1}"
 PKG="$SRC/dist/debroot/clipper"
 
 info() { printf '\033[1;34mdeb:\033[0m %s\n' "$*"; }
@@ -38,12 +38,13 @@ Architecture: all
 Depends: gnome-shell (>= 45)
 Recommends: nautilus
 Maintainer: mohrezsheikh <clipper@users.noreply.github.com>
-Homepage: https://github.com/mohrezsheikh/clipper
+Homepage: https://github.com/MohrezSheikh/Clipper
 Description: Windows-style clipboard history for GNOME
  Clipper keeps a history of everything you copy - text, code, images
  and screenshots, files, links and colors - behind a Win+V popup
- rendered inside GNOME Shell. Pin frequently used items, search, and
- paste straight into the window you were working in.
+ rendered inside GNOME Shell. Pin frequently used items, search, drag
+ the popup where you like, and paste straight into the window you were
+ working in. Follows the system light/dark appearance.
 EOF
 
 cat > "$PKG/DEBIAN/postinst" <<'EOF'
@@ -51,8 +52,13 @@ cat > "$PKG/DEBIAN/postinst" <<'EOF'
 set -e
 glib-compile-schemas /usr/share/glib-2.0/schemas/ 2>/dev/null || true
 echo "clipper: installed."
-echo "clipper: log out & back in once, then press Ctrl+Alt+V. The"
-echo "clipper: hotkey is changeable via gsettings (see README).
+echo "clipper: log out & back in once, then press Ctrl+Alt+V. Change the"
+echo "clipper: hotkey afterwards in the Extensions app (Clipper -> Settings)."
+echo "clipper: Settings also holds the appearance (system/light/dark), the"
+echo "clipper: paste behaviour and the history size."
+echo "clipper: Or from a terminal:"
+echo "clipper:   gsettings set io.github.mohrezsheikh.clipper clipper-toggle \"['<Super>v']\""
+echo "clipper:   gsettings reset io.github.mohrezsheikh.clipper panel-position"
 EOF
 
 cat > "$PKG/DEBIAN/prerm" <<'EOF'
