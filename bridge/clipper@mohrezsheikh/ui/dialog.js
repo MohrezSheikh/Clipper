@@ -28,9 +28,6 @@ export class ClipperDialog {
 
         this._open = false;
         this._built = false;
-        this._modal = false;
-        this._stageHandler = 0;
-        this._watchdog = 0;
         this._rows = [];
         this._selectedIndex = 0;
         this._filterText = '';
@@ -56,6 +53,9 @@ export class ClipperDialog {
             this.open();
     }
 
+    /* Non-blocking panel: no input grab, so other apps stay fully usable
+     * while the history dialog is open.  The user closes it deliberately
+     * (close button, Ctrl+Alt+V again, or Esc while the panel has focus). */
     open() {
         if (this._open)
             return;
@@ -71,42 +71,16 @@ export class ClipperDialog {
         Main.layoutManager.uiGroup.add_child(this._card);
         Main.layoutManager.uiGroup.set_child_above_sibling(this._card, null);
         this._card.show();
-
-        // Grab input on the card itself.  An invisible full-stage backdrop
-        // holding the grab is a freeze hazard: if anything below throws,
-        // every input event in the session would be swallowed.
-        try {
-            Main.pushModal(this._card, {
-                actionMode: Shell.ActionMode.POPUP,
-                timestamp: global.get_current_time(),
-            });
-            this._modal = true;
-        } catch (e) {
-            log(`clipper: pushModal failed (opening without grab): ${e}`);
-            this._modal = false;
-        }
-
-        // With a stage grab every event funnels through the grabbed actor's
-        // chain, so a captured-event handler on the stage still sees clicks
-        // landing outside the card - use the coordinates to dismiss.
         this._card.connect('key-press-event',
             this._onCapturedEvent.bind(this));
-        this._stageHandler = global.stage.connect('captured-event',
-            this._onGlobalEvent.bind(this));
+        // clicking anywhere on the panel returns keyboard focus to search
+        this._card.connect('button-press-event', () => {
+            this._search.grab_key_focus();
+            return Clutter.EVENT_PROPAGATE;
+        });
         this._open = true;
         this._search.grab_key_focus();
-
-        // watchdog: if the card is gone from the stage while we still think
-        // we are open, tear the state down so nothing stays grabbed
-        this._watchdog = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, () => {
-            this._watchdog = 0;
-            if (this._open && !this._card.get_parent()) {
-                log('clipper: dialog vanished unexpectedly; releasing grab');
-                this._destroyChrome();
-                this._open = false;
-            }
-            return GLib.SOURCE_REMOVE;
-        });
+        log('clipper: dialog opened (non-blocking)');
     }
 
     close() {
@@ -114,29 +88,10 @@ export class ClipperDialog {
             return;
         this._destroyChrome();
         this._open = false;
+        log('clipper: dialog closed');
     }
 
     _destroyChrome() {
-        if (this._watchdog) {
-            GLib.source_remove(this._watchdog);
-            this._watchdog = 0;
-        }
-        if (this._stageHandler) {
-            try {
-                global.stage.disconnect(this._stageHandler);
-            } catch {
-                /* handler may be gone already */
-            }
-            this._stageHandler = 0;
-        }
-        if (this._modal) {
-            try {
-                Main.popModal(this._card);
-            } catch {
-                /* the shell may have released the grab already */
-            }
-            this._modal = false;
-        }
         const parent = this._card?.get_parent();
         if (parent) {
             try {
@@ -145,27 +100,6 @@ export class ClipperDialog {
                 /* nothing else we can do here */
             }
         }
-    }
-
-    _onGlobalEvent(_stage, event) {
-        if (event.type() === Clutter.EventType.KEY_PRESS) {
-            if (event.get_key_symbol() === Clutter.KEY_Escape) {
-                this.close();
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        }
-        if (event.type() !== Clutter.EventType.BUTTON_PRESS &&
-            event.type() !== Clutter.EventType.TOUCH_BEGIN)
-            return Clutter.EVENT_PROPAGATE;
-        const [x, y] = global.get_pointer();
-        const [cx, cy] = this._card.get_position();
-        const [w, h] = this._card.get_size();
-        if (x < cx || x > cx + w || y < cy || y > cy + h) {
-            this.close();
-            return Clutter.EVENT_STOP;
-        }
-        return Clutter.EVENT_PROPAGATE;
     }
 
     setIncognito(enabled) {
@@ -273,11 +207,20 @@ export class ClipperDialog {
     }
 
     _updateIncognitoButton() {
-        this._incognitoButton.set_child(new St.Icon({
+        const row = new St.BoxLayout({
+            style_class: 'clipper-incognito-row',
+            vertical: false,
+            x_align: Clutter.ActorAlign.CENTER,
+        });
+        row.add_child(new St.Icon({
             icon_name: this._incognito ? 'view-conceal-symbolic'
                                        : 'view-reveal-symbolic',
-            icon_size: 15,
+            icon_size: 14,
         }));
+        row.add_child(new St.Label({
+            text: this._incognito ? 'Incognito ON' : 'Incognito',
+        }));
+        this._incognitoButton.set_child(row);
         if (this._incognito)
             this._incognitoButton.add_style_class_name('clipper-incognito-on');
         else
@@ -412,10 +355,12 @@ export class ClipperDialog {
             this._listBox.add_child(empty);
         }
 
-        this._hint.text = items.length
-            ? `${items.length} item${items.length > 1 ? 's' : ''}` +
-              '  ·  Enter paste · Ctrl+S pin · Del remove'
-            : '';
+        this._hint.text = this._incognito
+            ? 'Incognito ON — new copies are not recorded'
+            : (items.length
+                ? `${items.length} item${items.length > 1 ? 's' : ''}` +
+                  '  ·  Enter paste · Ctrl+S pin · Del remove'
+                : '');
 
         const keepIndex = respectIndex
             ? clamp(this._selectedIndex, 0, Math.max(0, items.length - 1))

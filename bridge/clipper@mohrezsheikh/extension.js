@@ -44,6 +44,7 @@ export default class ClipperExtension extends Extension {
             onClear: this._clear.bind(this),
             onIncognitoChanged: enabled => {
                 this._settings.set_boolean('incognito', enabled);
+                log(`clipper: incognito ${enabled ? 'ON' : 'OFF'}`);
                 this._refreshDialog();
             },
             onOpenFolder: this._openFolder.bind(this),
@@ -115,10 +116,11 @@ export default class ClipperExtension extends Extension {
     async _copy(item) {
         try {
             await this._capture.claim(item);
+            log('clipper: item copied to clipboard (popup stays open)');
         } catch (e) {
             log(`clipper: copy failed: ${e}`);
         }
-        this._dialog.close();
+        this._refreshDialog();
     }
 
     _clear() {

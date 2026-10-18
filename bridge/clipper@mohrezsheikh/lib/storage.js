@@ -45,10 +45,11 @@ export class ClipperHistory {
     /* ------------------------------------------------------------ loading */
     _load() {
         try {
-            const [ok, bytes] = histFile().load_contents(null);
+            const [ok, contents] = histFile().load_contents(null);
             if (!ok)
                 return;
-            const state = JSON.parse(bytes.toString());
+            const decoder = new TextDecoder();
+            const state = JSON.parse(decoder.decode(contents));
             this._items = (state.items ?? []).filter(Boolean);
             let maxSeq = 0;
             for (const item of this._items) {

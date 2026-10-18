@@ -66,10 +66,14 @@ export class CaptureManager {
     }
 
     async _capture(source) {
-        if (Date.now() - this._lastPastedAt < SELF_CLAIM_GRACE_MS)
-            return; // our own auto-paste claim echoing back
-        if (this._settings?.get_boolean('incognito'))
+        if (Date.now() - this._lastPastedAt < SELF_CLAIM_GRACE_MS) {
+            log('clipper: capture skipped (own claim echo)');
             return;
+        }
+        if (this._settings?.get_boolean('incognito')) {
+            log('clipper: capture skipped (incognito is on)');
+            return;
+        }
 
         const captures = [
             {name: KIND_IMAGE, mimes: IMAGE_MIMES, limit: IMAGE_LIMIT},
@@ -106,8 +110,10 @@ export class CaptureManager {
     }
 
     _readMime(source, mime, limit) {
+        // Meta.SelectionSource.read_async on GNOME 45+ takes a single mime
+        // STRING plus (cancellable, callback) - not an array, no priority.
         return new Promise(resolve => {
-            source.read_async([mime], GLib.PRIORITY_DEFAULT, null,
+            source.read_async(mime, null,
                 (src, res) => {
                     let stream;
                     try {
