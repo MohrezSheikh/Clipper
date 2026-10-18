@@ -37,7 +37,7 @@ Priority: optional
 Architecture: all
 Depends: gnome-shell (>= 45)
 Recommends: nautilus
-Maintainer: mohrezsheikh <clipper@users.noreply.github.com>
+Maintainer: Mohammad Reza Sheikh <68335653+MohrezSheikh@users.noreply.github.com>
 Homepage: https://github.com/MohrezSheikh/Clipper
 Description: Windows-style clipboard history for GNOME
  Clipper keeps a history of everything you copy - text, code, images
