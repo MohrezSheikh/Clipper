@@ -717,7 +717,9 @@ export class ClipperDialog {
     }
 
     _filesView(item) {
-        const paths = item.content.split('\n').filter(Boolean);
+        const paths = item.content.split('\n').map(s => s.trim()).filter(Boolean);
+        if (paths.length === 0)
+            return this._textLabel(item.content);
         const first = uriFilePath(paths[0]);
         const firstName = GLib.basename(first) || first;
         const more = paths.length > 1 ? ` +${paths.length - 1}` : '';
@@ -777,7 +779,8 @@ export class ClipperDialog {
 }
 
 /* ---------------------------------------------------------------- helpers */
-function clipText(text, max = 420) {
+function clipText(value, max = 420) {
+    const text = String(value ?? '');
     const lines = text.split('\n');
     if (lines.length > 8)
         return lines.slice(0, 8).join('\n') + '\n…';
@@ -787,6 +790,8 @@ function clipText(text, max = 420) {
 }
 
 function relTime(ms) {
+    if (!Number.isFinite(Number(ms)))
+        return '';
     const diff = Math.max(0, Date.now() - ms);
     const sec = diff / 1000;
     if (sec < 10)

@@ -17,7 +17,7 @@ import St from 'gi://St';
 
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-import {KIND_FILES, KIND_IMAGE, KIND_TEXT, md5} from './storage.js';
+import {KIND_FILES, KIND_IMAGE, KIND_TEXT, isLegacyJunk, md5} from './storage.js';
 
 /* Async entry points we want as promises.  Copyous and Pano use the same
  * helper; guarded so a missing symbol can never abort the whole extension. */
@@ -176,7 +176,9 @@ export class CaptureManager {
         const textMime = TEXT_MIMES.find(m => mimes.includes(m));
         if (textMime) {
             const text = decoder.decode(await this._readBytes(source, textMime));
-            if (!text || !text.trim())
+            // the wrapper guard would only ever trip on a regression of the
+            // decode above, but it keeps such a regression out of the file
+            if (!text || !text.trim() || isLegacyJunk(text))
                 return null;
             return {kind: KIND_TEXT, text, checksum: checksumOfString(text)};
         }

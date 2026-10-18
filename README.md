@@ -47,7 +47,7 @@ Download the newest `clipper_*_all.deb` from
 [Releases](https://github.com/mohrezsheikh/clipper/releases) and run:
 
 ```bash
-sudo apt install ./clipper_0.2.3_all.deb
+sudo apt install ./clipper_0.2.4_all.deb
 ```
 
 Then **log out and back in once** (a GNOME extension always needs a fresh
@@ -62,6 +62,15 @@ cd clipper
 ```
 
 Uninstall: `./uninstall.sh` (add `--purge` to remove your history data, too).
+
+The package installs to `/usr/share/gnome-shell/extensions/` and a source
+install to `~/.local/share/gnome-shell/extensions/`. GNOME prefers the user
+copy, so if you installed from source earlier and then switch to the `.deb`,
+remove the old copy first — otherwise you keep running the old code:
+
+```bash
+rm -rf ~/.local/share/gnome-shell/extensions/clipper@mohrezsheikh
+```
 
 ## Keyboard reference
 
@@ -101,14 +110,22 @@ bridge/clipper@mohrezsheikh/   the GNOME Shell extension
     clipboard.css              card styling
 legacy/                        preview: a GTK4 desktop manager app (v2)
 dist/deb.sh                    builds the .deb (one command)
+dist/doctor.sh                 read-only health check (see Troubleshooting)
 .github/workflows/release.yml  tags vX.Y.Z -> GitHub release with the .deb
 ```
 
 ## Troubleshooting
 
+Run `bash dist/doctor.sh` first: it prints the extension state, the build the
+running session actually loaded, the hotkey, how many items were captured and
+any recent errors from the shell log.
+
 - **Ctrl+Alt+V shows nothing after install** — a fresh session is
-  required (the extension must load anew). Run
-  `./install.sh` again if unsure, then log out/in once.
+  required: the shell imports an extension's code exactly once, so
+  `gnome-extensions disable/enable` does *not* pick up changed files. Log out
+  and back in once (`doctor.sh` prints `not logged in this boot` until you do).
+- **You changed the code and nothing changed** — same reason as above. Only a
+  new session (or a shell restart) reloads the module.
 - **Copied something but it is not in the list** — check that Incognito is off
   (the footer button shows the state) and look at the shell log:
   `journalctl --user -b | grep clipper`. Every accepted item logs
@@ -117,7 +134,8 @@ dist/deb.sh                    builds the .deb (one command)
   install.sh offers to disable it; having two active managers causes
   duplicate captures.
 - **Unreadable `[boxed instance wrapper …]` entries in the list** — those came
-  from a decoding bug fixed in 0.2.3; press Clear once to drop them.
+  from a decoding bug fixed in 0.2.3. They are dropped automatically when the
+  history loads, so just log out and back in once.
 - **Where is my data?** `~/.local/share/Clipper/history.json` and
   `~/.local/share/Clipper/images/`.
 

@@ -64,7 +64,7 @@ export default class ClipperExtension extends Extension {
         });
 
         this._settingsBind();
-        log('clipper: extension enabled');
+        log('clipper: extension enabled (build 0.2.4)');
     }
 
     disable() {

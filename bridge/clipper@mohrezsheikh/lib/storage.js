@@ -61,7 +61,9 @@ export class ClipperHistory {
                 return;
             const decoder = new TextDecoder();
             const state = JSON.parse(decoder.decode(contents));
-            this._items = (state.items ?? []).filter(Boolean);
+            this._items = (state.items ?? [])
+                .map(normalizeItem)
+                .filter(item => item !== null);
             let maxSeq = 0;
             for (const item of this._items) {
                 const parsed = Number(String(item.id ?? '').replace(/\D+.*$/, ''));
@@ -181,19 +183,17 @@ export class ClipperHistory {
             result = [...this._items];
         } else {
             result = this._items.filter(item => {
-                if (item.kind === KIND_TEXT)
-                    return item.content.toLowerCase().includes(needle);
-                if (item.kind === KIND_FILES)
-                    return item.content.toLowerCase().includes(needle);
-                const n = item.meta?.name ?? '';
-                return (n.toLowerCase() + ' ' + (item.meta?.hint ?? '').toLowerCase())
-                    .includes(needle);
+                const content = String(item.content ?? '');
+                if (item.kind === KIND_TEXT || item.kind === KIND_FILES)
+                    return content.toLowerCase().includes(needle);
+                const label = `${item.meta?.name ?? ''} ${item.meta?.hint ?? ''}`;
+                return label.toLowerCase().includes(needle);
             });
         }
         // pinned on top, then recency
         return result.slice().sort((a, b) =>
-            (Number(b.pinned ?? 0) - Number(a.pinned ?? 0)) ||
-            (b.date - a.date));
+            (Number(b.pinned) || 0) - (Number(a.pinned) || 0) ||
+            (Number(b.date) || 0) - (Number(a.date) || 0));
     }
 
     all() {
@@ -211,7 +211,35 @@ export function md5(bytes) {
     return checksum.get_string() ?? '';
 }
 
+/* Entries are read back from a JSON file that an older build (or a manual
+ * edit) may have written, so coerce every field the UI reads before rendering.
+ * Returns null for entries with nothing to show. */
+function normalizeItem(item) {
+    if (!item || typeof item !== 'object')
+        return null;
+    const content = typeof item.content === 'string' ? item.content : '';
+    if (!content || isLegacyJunk(content))
+        return null;
+    return {
+        ...item,
+        kind: typeof item.kind === 'string' ? item.kind : KIND_TEXT,
+        content,
+        date: Number.isFinite(Number(item.date)) ? Number(item.date) : Date.now(),
+        count: Number(item.count) > 0 ? Number(item.count) : 1,
+        size: Number(item.size) > 0 ? Number(item.size) : 0,
+        pinned: Boolean(item.pinned),
+        meta: item.meta && typeof item.meta === 'object' ? item.meta : {},
+    };
+}
+
 export function makeDir(dir) {
     dir.make_directory_with_parents(null);
     return dir;
+}
+
+/* 0.2.2 and earlier called GLib.Bytes.toString() instead of decoding the
+ * bytes, so the history filled up with "[boxed instance wrapper ...]" rows.
+ * Such rows are dead weight - drop them instead of showing them forever. */
+export function isLegacyJunk(content) {
+    return /^\[boxed instance wrapper /.test(content);
 }
