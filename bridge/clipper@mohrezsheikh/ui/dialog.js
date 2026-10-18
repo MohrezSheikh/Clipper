@@ -72,11 +72,16 @@ export class ClipperDialog {
             return;
         try {
             this._build();
-            this._refreshRows();
         } catch (e) {
-            log(`clipper: opening dialog failed: ${e}`);
+            log(`clipper: building the dialog failed: ${e}`);
             this._destroyChrome();
             return;
+        }
+        try {
+            this._refreshRows();
+        } catch (e) {
+            // an empty panel still beats no panel at all
+            log(`clipper: filling the dialog failed: ${e}`);
         }
         try {
             Main.layoutManager.uiGroup.add_child(this._card);
@@ -451,9 +456,34 @@ export class ClipperDialog {
         this._listBox.remove_all_children();
         this._rows = [];
 
-        const items = this._history.search(this._filterText);
-        for (const item of items)
-            this._listBox.add_child(this._buildRow(item).row);
+        let items = [];
+        try {
+            items = this._history.search(this._filterText);
+        } catch (e) {
+            log(`clipper: searching the history failed: ${e}`);
+        }
+        for (const item of items) {
+            // a single unrenderable item must never keep the popup shut: fall
+            // back to a plain label row instead of letting the exception
+            // escape into open()
+            let entry = null;
+            try {
+                entry = this._buildRow(item);
+            } catch (e) {
+                log(`clipper: rendering item ${item?.id} failed: ${e}`);
+            }
+            if (!entry?.row) {
+                try {
+                    entry = {row: this._plainRow(item), item};
+                } catch (e) {
+                    log(`clipper: plain row fallback failed: ${e}`);
+                }
+            }
+            if (!entry)
+                continue;
+            this._listBox.add_child(entry.row);
+            this._rows.push(entry);
+        }
 
         if (items.length === 0) {
             const filtered = (this._filterText ?? '').trim().length > 0;
@@ -484,6 +514,28 @@ export class ClipperDialog {
             this._setSelected(keepIndex);
         else
             this._highlight();
+    }
+
+    /* Last-resort row: render whatever we can as plain text. */
+    _plainRow(item) {
+        const row = new St.BoxLayout({
+            style_class: 'clipper-item',
+            vertical: false,
+            reactive: true,
+            x_expand: true,
+        });
+        const body = new St.Button({
+            style_class: 'clipper-item-body',
+            x_expand: true,
+            y_align: Clutter.ActorAlign.FILL,
+            child: new St.Label({
+                style_class: 'clipper-text',
+                text: String(item?.content ?? '').slice(0, 400),
+            }),
+        });
+        body.connect('clicked', () => this._onPaste?.(item));
+        row.add_child(body);
+        return row;
     }
 
     _buildRow(item) {
@@ -831,7 +883,7 @@ function annotateCodeLines(lines) {
 
 function looksLikeUrl(text) {
     const t = (text ?? '').trim();
-    if (!t || '\n' in t || t.length > 800 || /\s/.test(t))
+    if (!t || t.includes('\n') || t.length > 800 || /\s/.test(t))
         return false;
     return /^https?:\/\//i.test(t) || /^www\./i.test(t) || /^(mailto:|ftp:\/\/)/i.test(t);
 }

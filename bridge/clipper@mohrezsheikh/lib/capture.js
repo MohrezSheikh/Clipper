@@ -22,7 +22,6 @@ import {KIND_FILES, KIND_IMAGE, KIND_TEXT, md5} from './storage.js';
 /* Async entry points we want as promises.  Copyous and Pano use the same
  * helper; guarded so a missing symbol can never abort the whole extension. */
 for (const [proto, name] of [
-    [Meta.SelectionSource.prototype, 'read_async'],
     [Gio.MemoryOutputStream.prototype, 'splice_async'],
     [Gio.File.prototype, 'load_contents_async'],
     [Gio.File.prototype, 'replace_contents_async'],
@@ -186,7 +185,18 @@ export class CaptureManager {
     }
 
     async _readBytes(source, mime) {
-        const stream = await source.read_async(mime, null);
+        // Meta.SelectionSource.read_async takes exactly (mimetype, cancellable,
+        // callback) — calling it through a promisifier adds a fourth argument
+        // and makes the shell log an arity warning, so call it directly.
+        const stream = await new Promise((resolve, reject) => {
+            source.read_async(mime, null, (src, res) => {
+                try {
+                    resolve(src.read_finish(res));
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        });
         const out = Gio.MemoryOutputStream.new_resizable();
         await out.splice_async(
             stream,

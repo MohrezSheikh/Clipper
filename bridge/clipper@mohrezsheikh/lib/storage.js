@@ -23,6 +23,20 @@ function histFile() {
         GLib.build_filenamev([GLib.get_user_data_dir(), 'Clipper', 'history.json']));
 }
 
+/* make_directory_with_parents() raises G_IO_ERROR_EXISTS when the directory is
+ * already there, which used to make every image capture after the first one
+ * fail with "Error creating directory ... File exists". */
+function ensureDir(file) {
+    try {
+        if (!file.query_exists(null))
+            file.make_directory_with_parents(null);
+    } catch (e) {
+        if (!file.query_exists(null))
+            throw e;
+    }
+    return file;
+}
+
 export class ClipperHistory {
     constructor() {
         this._items = [];      // newest first
@@ -31,15 +45,12 @@ export class ClipperHistory {
     }
 
     dir() {
-        dataDir().make_directory_with_parents(null);
-        return dataDir();
+        return ensureDir(dataDir());
     }
 
     imagesDir() {
-        const dir = Gio.File.new_for_path(
-            GLib.build_filenamev([GLib.get_user_data_dir(), 'Clipper', 'images']));
-        dir.make_directory_with_parents(null);
-        return dir;
+        return ensureDir(Gio.File.new_for_path(
+            GLib.build_filenamev([GLib.get_user_data_dir(), 'Clipper', 'images'])));
     }
 
     /* ------------------------------------------------------------ loading */
