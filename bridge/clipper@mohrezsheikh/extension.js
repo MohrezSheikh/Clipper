@@ -170,8 +170,12 @@ export default class ClipperExtension extends Extension {
 
     _openFolder(item) {
         try {
+            const paths = item.content.split('\n').map(l => l.trim())
+                .filter(Boolean);
+            if (paths.length === 0)
+                return;
             const path = item.kind === KIND_IMAGE
-                ? item.content : uriFilePath(item.content.split('\n')[0]);
+                ? item.content : uriFilePath(paths[0]);
             const dir = GLib.path_get_dirname(path);
             Gio.Subprocess.new(['nautilus', dir],
                 Gio.SubprocessFlags.NONE);

@@ -329,20 +329,23 @@ export class CaptureManager {
             const device = this._device;
 
             // Ctrl+V is what every GUI toolkit expects; terminals need
-            // Ctrl+Shift+Insert.  notify_keyval wants microseconds.
+            // Ctrl+Shift+Insert.  notify_keyval wants microseconds.  We inject
+            // from a timer rather than a key handler, so the current event time
+            // can be 0 — fall back to the monotonic clock (same epoch, also in
+            // microseconds) instead of handing Mutter a zero timestamp.
             const terminal = Main.inputMethod?.content_purpose ===
                 Clutter.InputContentPurpose.TERMINAL;
             const keys = terminal
                 ? [Clutter.KEY_Control_L, Clutter.KEY_Shift_L,
                    Clutter.KEY_Insert]
                 : [Clutter.KEY_Control_L, Clutter.KEY_v];
+            const time = Clutter.get_current_event_time() * 1000 ||
+                GLib.get_monotonic_time();
 
             for (const key of keys)
-                device.notify_keyval(Clutter.get_current_event_time() * 1000,
-                    key, Clutter.KeyState.PRESSED);
+                device.notify_keyval(time, key, Clutter.KeyState.PRESSED);
             for (const key of keys.slice().reverse())
-                device.notify_keyval(Clutter.get_current_event_time() * 1000,
-                    key, Clutter.KeyState.RELEASED);
+                device.notify_keyval(time, key, Clutter.KeyState.RELEASED);
         } catch (e) {
             log(`clipper: paste injection failed: ${e}`);
         }
